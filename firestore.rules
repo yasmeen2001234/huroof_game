@@ -1,0 +1,92 @@
+// firestore.rules
+// =============================================================================
+// HUROOF GAME — Firestore Security Rules
+// =============================================================================
+
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ── Helper functions ──────────────────────────────────────────────────
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(uid) {
+      return request.auth.uid == uid;
+    }
+
+    function isGameHost(gameId) {
+      return get(/databases/$(database)/documents/games/$(gameId)).data.hostId
+             == request.auth.uid;
+    }
+
+    function isGamePlayer(gameId) {
+      return exists(
+        /databases/$(database)/documents/games/$(gameId)/players/$(request.auth.uid)
+      );
+    }
+
+    function isPlayerNotEliminated(gameId) {
+      return get(
+        /databases/$(database)/documents/games/$(gameId)/players/$(request.auth.uid)
+      ).data.isEliminated == false;
+    }
+
+    // ── Games collection ──────────────────────────────────────────────────
+
+    match /games/{gameId} {
+      // Anyone signed-in can read game metadata (to join via code)
+      allow read: if isSignedIn();
+
+      // Only authenticated users can create a game (they become host)
+      allow create: if isSignedIn()
+                    && request.resource.data.hostId == request.auth.uid;
+
+      // Only the host can update game-level fields (state, currentRound)
+      allow update: if isSignedIn() && isGameHost(gameId);
+
+      // No deletes
+      allow delete: if false;
+
+      // ── Players sub-collection ──────────────────────────────────────
+
+      match /players/{playerId} {
+        // All players in the game can read the player list
+        allow read: if isSignedIn() && isGamePlayer(gameId);
+
+        // A player can create their own document (joining)
+        allow create: if isSignedIn() && isOwner(playerId);
+
+        // Host can update any player (elimination, score)
+        // Players can update their own doc (isOnline)
+        allow update: if isSignedIn()
+                      && (isGameHost(gameId) || isOwner(playerId));
+
+        allow delete: if false;
+      }
+
+      // ── Rounds sub-collection ───────────────────────────────────────
+
+      match /rounds/{roundId} {
+        // All active players can read round data
+        allow read: if isSignedIn() && isGamePlayer(gameId);
+
+        // Only host can create new rounds
+        allow create: if isSignedIn() && isGameHost(gameId);
+
+        // Host can update state/phase fields.
+        // Non-eliminated players can append to submissions or cast votes.
+        allow update: if isSignedIn()
+                      && isGamePlayer(gameId)
+                      && (
+                        isGameHost(gameId)
+                        || isPlayerNotEliminated(gameId)
+                      );
+
+        allow delete: if false;
+      }
+    }
+  }
+}

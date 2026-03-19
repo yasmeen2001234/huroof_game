@@ -1,0 +1,26 @@
+name: huroof_game
+description: Huroof - Arabic Letter Card Game
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.3.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  firebase_core: '>=3.8.0 <4.0.0'
+  firebase_auth: '>=5.4.0 <6.0.0'
+  cloud_firestore: '>=5.6.0 <6.0.0'
+  flutter_riverpod: ^2.5.1
+  google_fonts: ^6.2.1
+  flutter_animate: ^4.5.0
+  uuid: ^4.4.2
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^4.0.0
+
+flutter:
+  uses-material-design: true
