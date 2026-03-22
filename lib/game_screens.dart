@@ -12,8 +12,9 @@ import './game_widgets.dart';
 // =============================================================================
 
 class LobbyScreen extends ConsumerWidget {
-  const LobbyScreen({super.key, required this.gameId});
+  const LobbyScreen({super.key, required this.gameId, this.onLeave});
   final String gameId;
+  final VoidCallback? onLeave;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -29,16 +30,21 @@ class LobbyScreen extends ConsumerWidget {
           Padding(
             padding: const EdgeInsets.all(20),
             child: Column(children: [
+              // Leave button row
+              if (onLeave != null)
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: TextButton.icon(
+                    onPressed: onLeave,
+                    icon: const Icon(Icons.exit_to_app, color: Colors.white60, size: 18),
+                    label: Text('مغادرة', style: arabicStyle(fontSize: 13, color: Colors.white60)),
+                  ),
+                ),
               Text('حروف',
                   style: arabicStyle(
-                          fontSize: 48,
-                          color: Colors.white,
-                          weight: FontWeight.w900)
+                          fontSize: 48, color: Colors.white, weight: FontWeight.w900)
                       .copyWith(shadows: const [
-                    Shadow(
-                        color: Color(0x44000000),
-                        offset: Offset(2, 4),
-                        blurRadius: 8)
+                    Shadow(color: Color(0x44000000), offset: Offset(2, 4), blurRadius: 8)
                   ])),
               const SizedBox(height: 8),
               Container(

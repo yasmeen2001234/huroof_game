@@ -22,6 +22,8 @@ class DefaultFirebaseOptions {
     projectId: 'huroof-game-86e99',
     authDomain: 'huroof-game-86e99.firebaseapp.com',
     storageBucket: 'huroof-game-86e99.firebasestorage.app',
+    // ↓ RTDB URL — set this after enabling Realtime Database in Firebase Console
+    databaseURL: 'https://huroof-game-86e99-default-rtdb.firebaseio.com',
   );
 
   static const FirebaseOptions android = FirebaseOptions(
@@ -30,6 +32,7 @@ class DefaultFirebaseOptions {
     messagingSenderId: '95841834900',
     projectId: 'huroof-game-86e99',
     storageBucket: 'huroof-game-86e99.firebasestorage.app',
+    databaseURL: 'https://huroof-game-86e99-default-rtdb.firebaseio.com',
   );
 
   static const FirebaseOptions ios = FirebaseOptions(
@@ -38,6 +41,7 @@ class DefaultFirebaseOptions {
     messagingSenderId: '95841834900',
     projectId: 'huroof-game-86e99',
     storageBucket: 'huroof-game-86e99.firebasestorage.app',
+    databaseURL: 'https://huroof-game-86e99-default-rtdb.firebaseio.com',
     iosBundleId: 'com.example.huruofGame',
   );
 }

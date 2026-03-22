@@ -21,8 +21,8 @@ void main() async {
     options: DefaultFirebaseOptions.currentPlatform,
   );
 
-  // On every launch: if this browser session was previously a host,
-  // delete that stale game and sign out so no ghost rooms linger.
+  // Sign out any stale anonymous session on every fresh app launch.
+  // The actual game deletion is handled server-side by RTDB onDisconnect.
   await GameService().cleanupStaleHostGame();
 
   runApp(const ProviderScope(child: HuruufApp()));

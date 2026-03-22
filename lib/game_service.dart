@@ -1,19 +1,33 @@
 import 'dart:async';
 import 'dart:math';
 
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_database/firebase_database.dart';
+import 'package:flutter/material.dart';
 
 import './game_models.dart';
 
+// ── Random room code generator (Among Us style: 6 uppercase letters) ─────────
+
+String _generateRoomCode() {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ'; // no I/O to avoid confusion
+  final rand = Random.secure();
+  return List.generate(6, (_) => chars[rand.nextInt(chars.length)]).join();
+}
+
 class GameService {
-  GameService({FirebaseFirestore? firestore, FirebaseAuth? auth})
-      : _db = firestore ?? FirebaseFirestore.instance,
-        _auth = auth ?? FirebaseAuth.instance;
+  GameService({
+    FirebaseFirestore? firestore,
+    FirebaseAuth? auth,
+    FirebaseDatabase? database,
+  })  : _db = firestore ?? FirebaseFirestore.instance,
+        _auth = auth ?? FirebaseAuth.instance,
+        _rtdb = database ?? FirebaseDatabase.instance;
 
   final FirebaseFirestore _db;
   final FirebaseAuth _auth;
+  final FirebaseDatabase _rtdb;
 
   String get currentUserId => _auth.currentUser?.uid ?? '';
 
@@ -38,39 +52,29 @@ class GameService {
   CollectionReference<Map<String, dynamic>> _rounds(String gid) =>
       _games.doc(gid).collection('rounds');
 
-  // ── Startup cleanup ───────────────────────────────────────────────────────
-  // Called once from main() on every app launch.
-  // If a stale anonymous session exists and that user was a host,
-  // delete their leftover game and sign them out so a fresh session starts.
+  // RTDB: one node per player per game
+  DatabaseReference _playerPresenceRef(String gameId, String uid) =>
+      _rtdb.ref('presence/$gameId/$uid');
+
+  // RTDB: the whole game's presence bucket
+  DatabaseReference _gamePresenceRef(String gameId) =>
+      _rtdb.ref('presence/$gameId');
+
+  // ── Startup: sign out stale session ──────────────────────────────────────
 
   Future<void> cleanupStaleHostGame() async {
-    final user = _auth.currentUser;
-    if (user == null) return;
-
-    try {
-      final snapshot = await _games
-          .where('hostId', isEqualTo: user.uid)
-          .where('isActive', isEqualTo: true)
-          .get();
-
-      for (final doc in snapshot.docs) {
-        await deleteGame(doc.id);
-      }
-    } catch (_) {}
-
-    // Sign out so the next createGame() starts a brand-new session
-    await _auth.signOut();
+    try { await _auth.signOut(); } catch (_) {}
   }
 
-  // ── Create / Join ─────────────────────────────────────────────────────────
+  // ── Create game — auto-generates room code ────────────────────────────────
 
-  Future<String> createGame(String username, String roomCode) async {
+  Future<String> createGame(String username) async {
     final uid = await _ensureSignedIn(username);
-    final code = roomCode.trim().toUpperCase();
 
-    final existing = await _games.doc(code).get();
-    if (existing.exists) {
-      throw Exception('كود الغرفة موجود مسبقاً، جرّب كوداً آخر');
+    // Generate a unique code (retry if collision)
+    String code = _generateRoomCode();
+    while ((await _games.doc(code).get()).exists) {
+      code = _generateRoomCode();
     }
 
     await _games.doc(code).set(GameModel(
@@ -88,94 +92,109 @@ class GameService {
       joinedAt: DateTime.now(),
     ).toMap());
 
-    // Register a browser tab-close listener (web only)
-    _registerBeforeUnload(code);
+    // Register RTDB presence for this player
+    await _registerPresence(code, uid);
 
     return code;
   }
 
-  // ── beforeunload — fires when tab or browser window is closed ────────────
-  // Uses JS interop to attach an event listener that deletes the game
-  // document via Firestore REST so it fires even as the page unloads.
-
-  void _registerBeforeUnload(String gameId) {
-    if (!kIsWeb) return;
-    try {
-      // We call eval via the dart:html window object
-      // This avoids needing dart:js import (which triggers a lint warning)
-      final script = '''
-        (function() {
-          var gid = "$gameId";
-          var projectId = "huroof-game-86e99";
-          function cleanup() {
-            var base = "https://firestore.googleapis.com/v1/projects/" + projectId + "/databases/(default)/documents/";
-            // Mark game as inactive synchronously using sendBeacon (guaranteed delivery on unload)
-            navigator.sendBeacon(
-              "https://us-central1-" + projectId + ".cloudfunctions.net/deleteGame?gameId=" + gid
-            );
-          }
-          window.addEventListener("beforeunload", cleanup);
-          window.addEventListener("pagehide", cleanup);
-        })();
-      ''';
-      // ignore: undefined_prefixed_name
-      (Uri.base); // just to confirm web context compiles
-      _evalJs(script);
-    } catch (_) {}
-  }
-
-  void _evalJs(String script) {
-    // We use a platform channel pattern — on web the JS is injected
-    // via dart:html's ScriptElement if dart:js is unavailable
-    try {
-      // ignore: avoid_web_libraries_in_flutter
-      // This is intentionally conditional on kIsWeb above
-      final html = Uri.base.toString(); // triggers web-only path
-      if (html.isNotEmpty) {
-        // dart:html approach — inject a script tag
-        // This compiles fine because the entire method is kIsWeb-gated
-      }
-    } catch (_) {}
-  }
-
-  Future<void> deleteGame(String gameId) async {
-    try {
-      final players = await _players(gameId).get();
-      final rounds = await _rounds(gameId).get();
-      final batch = _db.batch();
-      for (final doc in players.docs) batch.delete(doc.reference);
-      for (final doc in rounds.docs) batch.delete(doc.reference);
-      batch.delete(_games.doc(gameId));
-      await batch.commit();
-    } catch (_) {}
-  }
+  // ── Join game ─────────────────────────────────────────────────────────────
 
   Future<void> joinGame(String gameId, String username) async {
     final uid = await _ensureSignedIn(username);
     final code = gameId.trim().toUpperCase();
     final doc = await _games.doc(code).get();
     if (!doc.exists) throw Exception('الغرفة غير موجودة: $code');
+
     await _players(code).doc(uid).set(PlayerModel(
       id: uid,
       username: username,
       joinedAt: DateTime.now(),
     ).toMap());
+
+    // Register RTDB presence for this player
+    await _registerPresence(code, uid);
+  }
+
+  // ── RTDB presence per player ──────────────────────────────────────────────
+  //
+  // Each player writes their own node: /presence/{gameId}/{uid} = true
+  // onDisconnect removes their node.
+  // A separate listener watches /presence/{gameId} — when it becomes
+  // empty (all players gone), the Firestore game is deleted.
+  //
+  // This works for ANY disconnect: host, guest, crash, tab close, etc.
+
+  Future<void> _registerPresence(String gameId, String uid) async {
+    final ref = _playerPresenceRef(gameId, uid);
+
+    // Mark self as present
+    await ref.set(true);
+
+    // Server will remove this node when WebSocket drops
+    await ref.onDisconnect().remove();
+  }
+
+  // ── Watch game presence — called by ALL clients ───────────────────────────
+  // Returns a subscription. Cancel it in dispose().
+  // Fires onEmpty when /presence/{gameId} has no children left.
+
+  StreamSubscription<DatabaseEvent> watchPresence(
+    String gameId,
+    VoidCallback onEmpty,
+  ) {
+    return _gamePresenceRef(gameId).onValue.listen((event) {
+      final data = event.snapshot.value;
+      // null or empty map = no players connected → delete the game
+      if (data == null) {
+        onEmpty();
+        return;
+      }
+      if (data is Map && data.isEmpty) {
+        onEmpty();
+      }
+    });
+  }
+
+  // ── Delete game ───────────────────────────────────────────────────────────
+
+  Future<void> deleteGame(String gameId) async {
+    try {
+      final players = await _players(gameId).get();
+      final rounds  = await _rounds(gameId).get();
+      final batch   = _db.batch();
+      for (final d in players.docs) batch.delete(d.reference);
+      for (final d in rounds.docs)  batch.delete(d.reference);
+      batch.delete(_games.doc(gameId));
+      await batch.commit();
+    } catch (_) {}
+    try { await _gamePresenceRef(gameId).remove(); } catch (_) {}
+  }
+
+  // ── Remove self from presence (clean leave) ───────────────────────────────
+
+  Future<void> leaveGame(String gameId) async {
+    try {
+      final uid = currentUserId;
+      await _playerPresenceRef(gameId, uid).onDisconnect().cancel();
+      await _playerPresenceRef(gameId, uid).remove();
+    } catch (_) {}
   }
 
   // ── Round management ──────────────────────────────────────────────────────
 
   Future<void> startNextRound(String gameId) async {
     final gameDoc = await _games.doc(gameId).get();
-    final game = GameModel.fromMap(gameDoc.data()!, gameDoc.id);
-    final newRoundNumber = game.currentRound + 1;
-    final roundId = 'round_$newRoundNumber';
+    final game    = GameModel.fromMap(gameDoc.data()!, gameDoc.id);
+    final newNum  = game.currentRound + 1;
+    final roundId = 'round_$newNum';
     final category =
         TaskCategory.values[Random().nextInt(TaskCategory.values.length)];
     final letter = arabicLetters[Random().nextInt(arabicLetters.length)];
 
     final batch = _db.batch();
     batch.set(_rounds(gameId).doc(roundId), {
-      'roundNumber': newRoundNumber,
+      'roundNumber': newNum,
       'category': category.name,
       'letter': letter,
       'state': RoundState.typing.name,
@@ -186,7 +205,7 @@ class GameService {
     });
     batch.update(_games.doc(gameId), {
       'currentState': RoundState.typing.name,
-      'currentRound': newRoundNumber,
+      'currentRound': newNum,
     });
     await batch.commit();
   }
@@ -206,11 +225,11 @@ class GameService {
 
   Future<void> submitAnswer(
       String gameId, String roundId, String answer) async {
-    final uid = currentUserId;
+    final uid       = currentUserId;
     final playerDoc = await _players(gameId).doc(uid).get();
-    final player = PlayerModel.fromMap(playerDoc.data()!, playerDoc.id);
-    final roundDoc = await _rounds(gameId).doc(roundId).get();
-    final round = RoundModel.fromMap(roundDoc.data()!, roundDoc.id);
+    final player    = PlayerModel.fromMap(playerDoc.data()!, playerDoc.id);
+    final roundDoc  = await _rounds(gameId).doc(roundId).get();
+    final round     = RoundModel.fromMap(roundDoc.data()!, roundDoc.id);
     if (round.submissions.any((s) => s.playerId == uid)) return;
     await _rounds(gameId).doc(roundId).update({
       'submissions': FieldValue.arrayUnion([
@@ -228,12 +247,10 @@ class GameService {
       String targetPlayerId, String voteType) async {
     assert(voteType == 'up' || voteType == 'down');
     final voterId = currentUserId;
-    if (voterId == targetPlayerId) {
-      throw Exception('لا يمكنك التصويت على إجابتك');
-    }
+    if (voterId == targetPlayerId) throw Exception('لا يمكنك التصويت على إجابتك');
     final roundDoc = await _rounds(gameId).doc(roundId).get();
-    final round = RoundModel.fromMap(roundDoc.data()!, roundDoc.id);
-    final updated = round.submissions.map((s) {
+    final round    = RoundModel.fromMap(roundDoc.data()!, roundDoc.id);
+    final updated  = round.submissions.map((s) {
       if (s.playerId == targetPlayerId) {
         final nv = Map<String, String>.from(s.votes)..[voterId] = voteType;
         return s.copyWith(votes: nv);
@@ -261,7 +278,7 @@ class GameService {
   // ── Score settling ────────────────────────────────────────────────────────
 
   Future<void> settleVotingScores(String gameId, String roundId) async {
-    final doc = await _rounds(gameId).doc(roundId).get();
+    final doc   = await _rounds(gameId).doc(roundId).get();
     final round = RoundModel.fromMap(doc.data()!, roundId);
     final batch = _db.batch();
     for (final sub in round.submissions) {
@@ -276,7 +293,7 @@ class GameService {
   }
 
   Future<void> settleUniquenessScores(String gameId, String roundId) async {
-    final doc = await _rounds(gameId).doc(roundId).get();
+    final doc   = await _rounds(gameId).doc(roundId).get();
     final round = RoundModel.fromMap(doc.data()!, roundId);
     final batch = _db.batch();
     final allUnique = {
@@ -284,8 +301,7 @@ class GameService {
       ...round.uniquePlayerIds,
     };
     for (final pid in allUnique) {
-      batch.update(
-          _players(gameId).doc(pid), {'score': FieldValue.increment(5)});
+      batch.update(_players(gameId).doc(pid), {'score': FieldValue.increment(5)});
     }
     await batch.commit();
   }
@@ -293,24 +309,21 @@ class GameService {
   // ── Streams ───────────────────────────────────────────────────────────────
 
   Stream<GameModel> watchGame(String gameId) => _games
-      .doc(gameId)
-      .snapshots()
+      .doc(gameId).snapshots()
       .map((s) => GameModel.fromMap(s.data()!, s.id));
 
-  Stream<List<PlayerModel>> watchPlayers(String gameId) => _players(gameId)
-      .orderBy('score', descending: true)
-      .snapshots()
-      .map((s) =>
-          s.docs.map((d) => PlayerModel.fromMap(d.data(), d.id)).toList());
+  Stream<List<PlayerModel>> watchPlayers(String gameId) =>
+      _players(gameId).orderBy('score', descending: true).snapshots()
+      .map((s) => s.docs.map((d) => PlayerModel.fromMap(d.data(), d.id)).toList());
 
   Stream<RoundModel?> watchCurrentRound(String gameId) =>
-      _games.doc(gameId).snapshots().asyncExpand((gameSnap) {
-        final data = gameSnap.data();
+      _games.doc(gameId).snapshots().asyncExpand((snap) {
+        final data = snap.data();
         if (data == null) return Stream.value(null);
         final cur = data['currentRound'] as int? ?? 0;
         if (cur == 0) return Stream.value(null);
-        return _rounds(gameId).doc('round_$cur').snapshots().map(
-            (s) => s.exists ? RoundModel.fromMap(s.data()!, s.id) : null);
+        return _rounds(gameId).doc('round_$cur').snapshots()
+            .map((s) => s.exists ? RoundModel.fromMap(s.data()!, s.id) : null);
       });
 
   Future<bool> isHost(String gameId) async {
