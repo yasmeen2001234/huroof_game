@@ -63,8 +63,7 @@ class PlayerModel {
       isEliminated: map['isEliminated'] as bool? ?? false,
       isHost: map['isHost'] as bool? ?? false,
       isOnline: map['isOnline'] as bool? ?? true,
-      joinedAt:
-          (map['joinedAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
+      joinedAt: (map['joinedAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
     );
   }
 
@@ -143,7 +142,10 @@ class RoundModel {
   final RoundState state;
   final DateTime? phaseStartedAt;
   final List<PlayerSubmission> submissions;
-  final List<String> uniquePlayerIds;
+
+  /// Map<voterId, List<targetPlayerId>>
+  /// Each voter can pick multiple cards independently.
+  final Map<String, List<String>> uniqueVotes;
 
   /// Players who pressed "التالي" in the uniqueness phase
   final List<String> readyPlayerIds;
@@ -156,11 +158,24 @@ class RoundModel {
     required this.state,
     this.phaseStartedAt,
     List<PlayerSubmission>? submissions,
-    List<String>? uniquePlayerIds,
+    Map<String, List<String>>? uniqueVotes,
     List<String>? readyPlayerIds,
   })  : submissions = submissions ?? [],
-        uniquePlayerIds = uniquePlayerIds ?? [],
+        uniqueVotes = uniqueVotes ?? {},
         readyPlayerIds = readyPlayerIds ?? [];
+
+  /// How many voters picked a given targetPlayerId
+  int uniqueVoteCountFor(String targetPlayerId) => uniqueVotes.values
+      .where((picks) => picks.contains(targetPlayerId))
+      .length;
+
+  /// Did a specific voter pick a specific target?
+  bool hasMyVoteFor(String voterId, String targetPlayerId) =>
+      uniqueVotes[voterId]?.contains(targetPlayerId) ?? false;
+
+  /// All targetPlayerIds picked by a specific voter
+  List<String> myPicks(String voterId) =>
+      List<String>.from(uniqueVotes[voterId] ?? []);
 
   /// Answers that appear exactly once across all submissions
   List<PlayerSubmission> get uniqueSubmissions {
@@ -187,16 +202,13 @@ class RoundModel {
         (s) => s.name == map['state'],
         orElse: () => RoundState.waiting,
       ),
-      phaseStartedAt:
-          (map['phaseStartedAt'] as Timestamp?)?.toDate(),
+      phaseStartedAt: (map['phaseStartedAt'] as Timestamp?)?.toDate(),
       submissions: (map['submissions'] as List<dynamic>? ?? [])
-          .map((s) =>
-              PlayerSubmission.fromMap(s as Map<String, dynamic>))
+          .map((s) => PlayerSubmission.fromMap(s as Map<String, dynamic>))
           .toList(),
-      uniquePlayerIds: List<String>.from(
-          map['uniquePlayerIds'] as List? ?? []),
-      readyPlayerIds: List<String>.from(
-          map['readyPlayerIds'] as List? ?? []),
+      uniqueVotes: (map['uniqueVotes'] as Map? ?? {}).map(
+          (k, v) => MapEntry(k as String, List<String>.from(v as List? ?? []))),
+      readyPlayerIds: List<String>.from(map['readyPlayerIds'] as List? ?? []),
     );
   }
 
@@ -209,7 +221,7 @@ class RoundModel {
             ? Timestamp.fromDate(phaseStartedAt!)
             : FieldValue.serverTimestamp(),
         'submissions': submissions.map((s) => s.toMap()).toList(),
-        'uniquePlayerIds': uniquePlayerIds,
+        'uniqueVotes': uniqueVotes,
         'readyPlayerIds': readyPlayerIds,
       };
 }
@@ -247,8 +259,7 @@ class GameModel {
       ),
       totalRounds: map['totalRounds'] as int? ?? 5,
       currentRound: map['currentRound'] as int? ?? 0,
-      createdAt:
-          (map['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
+      createdAt: (map['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
       isActive: map['isActive'] as bool? ?? true,
     );
   }
@@ -268,7 +279,32 @@ class GameModel {
 // ---------------------------------------------------------------------------
 
 const List<String> arabicLetters = [
-  'أ', 'ب', 'ت', 'ث', 'ج', 'ح', 'خ', 'د', 'ذ', 'ر',
-  'ز', 'س', 'ش', 'ص', 'ض', 'ط', 'ظ', 'ع', 'غ', 'ف',
-  'ق', 'ك', 'ل', 'م', 'ن', 'ه', 'و', 'ي',
+  'أ',
+  'ب',
+  'ت',
+  'ث',
+  'ج',
+  'ح',
+  'خ',
+  'د',
+  'ذ',
+  'ر',
+  'ز',
+  'س',
+  'ش',
+  'ص',
+  'ض',
+  'ط',
+  'ظ',
+  'ع',
+  'غ',
+  'ف',
+  'ق',
+  'ك',
+  'ل',
+  'م',
+  'ن',
+  'ه',
+  'و',
+  'ي',
 ];

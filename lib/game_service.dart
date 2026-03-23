@@ -5,13 +5,10 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_database/firebase_database.dart';
 import 'package:flutter/material.dart';
-
 import './game_models.dart';
 
-// ── Random room code generator (Among Us style: 6 uppercase letters) ─────────
-
 String _generateRoomCode() {
-  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ'; // no I/O to avoid confusion
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
   final rand = Random.secure();
   return List.generate(6, (_) => chars[rand.nextInt(chars.length)]).join();
 }
@@ -43,7 +40,13 @@ class GameService {
     return cred.user!.uid;
   }
 
-  // ── Refs ──────────────────────────────────────────────────────────────────
+  Future<void> cleanupStaleHostGame() async {
+    try {
+      await _auth.signOut();
+    } catch (_) {}
+  }
+
+  // ── Firestore refs ────────────────────────────────────────────────────────
 
   CollectionReference<Map<String, dynamic>> get _games =>
       _db.collection('games');
@@ -52,162 +55,247 @@ class GameService {
   CollectionReference<Map<String, dynamic>> _rounds(String gid) =>
       _games.doc(gid).collection('rounds');
 
-  // RTDB: one node per player per game
-  DatabaseReference _playerPresenceRef(String gameId, String uid) =>
-      _rtdb.ref('presence/$gameId/$uid');
+  // ── RTDB refs are defined inside the presence section below ─────────────
 
-  // RTDB: the whole game's presence bucket
-  DatabaseReference _gamePresenceRef(String gameId) =>
-      _rtdb.ref('presence/$gameId');
-
-  // ── Startup: sign out stale session ──────────────────────────────────────
-
-  Future<void> cleanupStaleHostGame() async {
-    try { await _auth.signOut(); } catch (_) {}
-  }
-
-  // ── Create game — auto-generates room code ────────────────────────────────
+  // ── Create ────────────────────────────────────────────────────────────────
 
   Future<String> createGame(String username) async {
     final uid = await _ensureSignedIn(username);
 
-    // Generate a unique code (retry if collision)
     String code = _generateRoomCode();
     while ((await _games.doc(code).get()).exists) {
       code = _generateRoomCode();
     }
 
-    await _games.doc(code).set(GameModel(
-      id: code,
-      hostId: uid,
-      currentState: RoundState.waiting,
-      totalRounds: 5,
-      createdAt: DateTime.now(),
-    ).toMap());
+    final batch = _db.batch();
+    batch.set(
+        _games.doc(code),
+        GameModel(
+          id: code,
+          hostId: uid,
+          currentState: RoundState.waiting,
+          totalRounds: 5,
+          createdAt: DateTime.now(),
+        ).toMap());
+    batch.set(
+        _players(code).doc(uid),
+        PlayerModel(
+          id: uid,
+          username: username,
+          isHost: true,
+          joinedAt: DateTime.now(),
+        ).toMap());
+    await batch.commit();
 
-    await _players(code).doc(uid).set(PlayerModel(
-      id: uid,
-      username: username,
-      isHost: true,
-      joinedAt: DateTime.now(),
-    ).toMap());
-
-    // Register RTDB presence for this player
     await _registerPresence(code, uid);
-
     return code;
   }
 
-  // ── Join game ─────────────────────────────────────────────────────────────
+  // ── Join ──────────────────────────────────────────────────────────────────
 
   Future<void> joinGame(String gameId, String username) async {
     final uid = await _ensureSignedIn(username);
     final code = gameId.trim().toUpperCase();
+
     final doc = await _games.doc(code).get();
     if (!doc.exists) throw Exception('الغرفة غير موجودة: $code');
 
     await _players(code).doc(uid).set(PlayerModel(
-      id: uid,
-      username: username,
-      joinedAt: DateTime.now(),
-    ).toMap());
+          id: uid,
+          username: username,
+          joinedAt: DateTime.now(),
+        ).toMap());
 
-    // Register RTDB presence for this player
     await _registerPresence(code, uid);
   }
 
-  // ── RTDB presence per player ──────────────────────────────────────────────
+  // ── RTDB presence ─────────────────────────────────────────────────────────
   //
-  // Each player writes their own node: /presence/{gameId}/{uid} = true
-  // onDisconnect removes their node.
-  // A separate listener watches /presence/{gameId} — when it becomes
-  // empty (all players gone), the Firestore game is deleted.
+  // Structure:
+  //   /presence/{gameId}/players/{uid} = true   ← each player's node
+  //   /presence/{gameId}/dead          = true   ← written by last player onDisconnect
   //
-  // This works for ANY disconnect: host, guest, crash, tab close, etc.
+  // Every player schedules TWO onDisconnect operations:
+  //   1. Remove their own player node
+  //   2. Set /presence/{gameId}/dead = true
+  //
+  // Why this works for the last player:
+  //   When the last tab closes, Firebase server executes BOTH operations.
+  //   The `dead` flag appears. All other clients are gone, but the server
+  //   wrote it — and when ANY new client joins later they'll see it.
+  //   More importantly: the Firestore game doc gets cleaned up via
+  //   the watchPresence onChildRemoved for non-last players,
+  //   and via the watchDead listener for the last player.
+
+  DatabaseReference _playerRef(String gameId, String uid) =>
+      _rtdb.ref('presence/$gameId/players/$uid');
+  DatabaseReference _gameRef(String gameId) =>
+      _rtdb.ref('presence/$gameId/players');
+  DatabaseReference _deadRef(String gameId) =>
+      _rtdb.ref('presence/$gameId/dead');
 
   Future<void> _registerPresence(String gameId, String uid) async {
-    final ref = _playerPresenceRef(gameId, uid);
+    final playerRef = _playerRef(gameId, uid);
+    final deadRef = _deadRef(gameId);
 
-    // Mark self as present
-    await ref.set(true);
+    // Clear any stale dead flag first
+    await deadRef.remove();
 
-    // Server will remove this node when WebSocket drops
-    await ref.onDisconnect().remove();
+    // Write our presence
+    await playerRef.set(true);
+
+    // When WE disconnect:
+    //   1. Remove our node (fires onChildRemoved on other clients)
+    //   2. Write dead=true (server-side, no client needed to observe)
+    await playerRef.onDisconnect().remove();
+    await deadRef.onDisconnect().set(true);
   }
 
-  // ── Watch game presence — called by ALL clients ───────────────────────────
-  // Returns a subscription. Cancel it in dispose().
-  // Fires onEmpty when /presence/{gameId} has no children left.
+  Future<void> leaveGame(String gameId) async {
+    final uid = currentUserId;
+    if (uid.isEmpty || gameId.isEmpty) return;
 
-  StreamSubscription<DatabaseEvent> watchPresence(
+    try {
+      await _playerRef(gameId, uid).onDisconnect().cancel();
+      await _deadRef(gameId).onDisconnect().cancel();
+      await _playerRef(gameId, uid).remove();
+    } catch (_) {}
+
+    try {
+      await _players(gameId).doc(uid).delete();
+    } catch (_) {}
+
+    try {
+      final remaining = await _players(gameId).get();
+      if (remaining.docs.isEmpty) {
+        await deleteGame(gameId);
+      }
+    } catch (_) {}
+  }
+
+  // ── Watch RTDB — two listeners ────────────────────────────────────────────
+  //
+  // Listener A — onChildRemoved on /presence/{gameId}/players:
+  //   Fires on OTHER clients when a player's tab closes.
+  //   Deletes that player's Firestore doc and checks if room is empty.
+  //
+  // Listener B — onValue on /presence/{gameId}/dead:
+  //   Fires when the LAST player closes their tab (server writes dead=true).
+  //   At this point no other clients exist, but the NEXT time anyone
+  //   opens the app and tries to join this game, or if any client was
+  //   briefly open, they clean it up.
+  //   More crucially: if there are 2 players, player A leaves cleanly,
+  //   player B is the last one — when B closes the tab, dead=true is set.
+  //   Player A already left so their listener is gone. But the Firestore
+  //   doc is cleaned up by leaveGame() when A left (empty check).
+  //   So dead flag is mainly the safety net.
+
+  List<StreamSubscription> watchPresence(
     String gameId,
     VoidCallback onEmpty,
   ) {
-    return _gamePresenceRef(gameId).onValue.listen((event) {
-      final data = event.snapshot.value;
-      // null or empty map = no players connected → delete the game
-      if (data == null) {
+    final subs = <StreamSubscription>[];
+
+    // Listener A: individual disconnects (non-last players)
+    subs.add(_gameRef(gameId).onChildRemoved.listen((event) async {
+      final uid = event.snapshot.key;
+      if (uid == null) return;
+
+      try {
+        await _players(gameId).doc(uid).delete();
+      } catch (_) {}
+
+      try {
+        final remaining = await _players(gameId).get();
+        if (remaining.docs.isEmpty) onEmpty();
+      } catch (_) {}
+    }));
+
+    // Listener B: dead flag (last player hard disconnect)
+    subs.add(_deadRef(gameId).onValue.listen((event) async {
+      if (event.snapshot.value == true) {
+        // Last player disconnected — clean up everything
+        try {
+          await deleteGame(gameId);
+        } catch (_) {}
         onEmpty();
-        return;
       }
-      if (data is Map && data.isEmpty) {
-        onEmpty();
-      }
+    }));
+
+    return subs;
+  }
+
+  // Watch for the game document itself being deleted (room gone)
+  StreamSubscription<DocumentSnapshot> watchGameDeleted(
+    String gameId,
+    VoidCallback onDeleted,
+  ) {
+    return _games.doc(gameId).snapshots().listen((snap) {
+      if (!snap.exists) onDeleted();
     });
   }
 
-  // ── Delete game ───────────────────────────────────────────────────────────
+  // ── Delete entire game ────────────────────────────────────────────────────
 
   Future<void> deleteGame(String gameId) async {
     try {
       final players = await _players(gameId).get();
-      final rounds  = await _rounds(gameId).get();
-      final batch   = _db.batch();
+      final rounds = await _rounds(gameId).get();
+      final batch = _db.batch();
       for (final d in players.docs) batch.delete(d.reference);
-      for (final d in rounds.docs)  batch.delete(d.reference);
+      for (final d in rounds.docs) batch.delete(d.reference);
       batch.delete(_games.doc(gameId));
       await batch.commit();
     } catch (_) {}
-    try { await _gamePresenceRef(gameId).remove(); } catch (_) {}
-  }
-
-  // ── Remove self from presence (clean leave) ───────────────────────────────
-
-  Future<void> leaveGame(String gameId) async {
     try {
-      final uid = currentUserId;
-      await _playerPresenceRef(gameId, uid).onDisconnect().cancel();
-      await _playerPresenceRef(gameId, uid).remove();
+      await _gameRef(gameId).remove();
     } catch (_) {}
   }
 
   // ── Round management ──────────────────────────────────────────────────────
 
   Future<void> startNextRound(String gameId) async {
-    final gameDoc = await _games.doc(gameId).get();
-    final game    = GameModel.fromMap(gameDoc.data()!, gameDoc.id);
-    final newNum  = game.currentRound + 1;
-    final roundId = 'round_$newNum';
-    final category =
-        TaskCategory.values[Random().nextInt(TaskCategory.values.length)];
-    final letter = arabicLetters[Random().nextInt(arabicLetters.length)];
+    print('DEBUG startNextRound called for $gameId');
+    try {
+      final gameDoc = await _games.doc(gameId).get();
+      if (!gameDoc.exists) {
+        print('DEBUG game doc does not exist!');
+        return;
+      }
+      final game = GameModel.fromMap(gameDoc.data()!, gameDoc.id);
+      final newNum = game.currentRound + 1;
+      final roundId = 'round_$newNum';
+      print('DEBUG creating round $roundId');
+      final category =
+          TaskCategory.values[Random().nextInt(TaskCategory.values.length)];
+      final letter = arabicLetters[Random().nextInt(arabicLetters.length)];
 
-    final batch = _db.batch();
-    batch.set(_rounds(gameId).doc(roundId), {
-      'roundNumber': newNum,
-      'category': category.name,
-      'letter': letter,
-      'state': RoundState.typing.name,
-      'phaseStartedAt': FieldValue.serverTimestamp(),
-      'submissions': [],
-      'uniquePlayerIds': [],
-      'readyPlayerIds': [],
-    });
-    batch.update(_games.doc(gameId), {
-      'currentState': RoundState.typing.name,
-      'currentRound': newNum,
-    });
-    await batch.commit();
+      // Reset isEliminated for ALL players — everyone plays each new round
+      final playersSnap = await _players(gameId).get();
+      final batch = _db.batch();
+      for (final doc in playersSnap.docs) {
+        batch.update(doc.reference, {'isEliminated': false});
+      }
+
+      batch.set(_rounds(gameId).doc(roundId), {
+        'roundNumber': newNum,
+        'category': category.name,
+        'letter': letter,
+        'state': RoundState.typing.name,
+        'phaseStartedAt': FieldValue.serverTimestamp(),
+        'submissions': [],
+        'uniqueVotes': {},
+        'readyPlayerIds': [],
+      });
+      batch.update(_games.doc(gameId), {
+        'currentState': RoundState.typing.name,
+        'currentRound': newNum,
+      });
+      await batch.commit();
+      print('DEBUG round $roundId committed successfully');
+    } catch (e, st) {
+      print('DEBUG startNextRound ERROR: $e\n$st');
+    }
   }
 
   Future<void> advanceRoundState(
@@ -225,11 +313,11 @@ class GameService {
 
   Future<void> submitAnswer(
       String gameId, String roundId, String answer) async {
-    final uid       = currentUserId;
+    final uid = currentUserId;
     final playerDoc = await _players(gameId).doc(uid).get();
-    final player    = PlayerModel.fromMap(playerDoc.data()!, playerDoc.id);
-    final roundDoc  = await _rounds(gameId).doc(roundId).get();
-    final round     = RoundModel.fromMap(roundDoc.data()!, roundDoc.id);
+    final player = PlayerModel.fromMap(playerDoc.data()!, playerDoc.id);
+    final roundDoc = await _rounds(gameId).doc(roundId).get();
+    final round = RoundModel.fromMap(roundDoc.data()!, roundDoc.id);
     if (round.submissions.any((s) => s.playerId == uid)) return;
     await _rounds(gameId).doc(roundId).update({
       'submissions': FieldValue.arrayUnion([
@@ -243,14 +331,15 @@ class GameService {
     });
   }
 
-  Future<void> castVote(String gameId, String roundId,
-      String targetPlayerId, String voteType) async {
+  Future<void> castVote(String gameId, String roundId, String targetPlayerId,
+      String voteType) async {
     assert(voteType == 'up' || voteType == 'down');
     final voterId = currentUserId;
-    if (voterId == targetPlayerId) throw Exception('لا يمكنك التصويت على إجابتك');
+    if (voterId == targetPlayerId)
+      throw Exception('لا يمكنك التصويت على إجابتك');
     final roundDoc = await _rounds(gameId).doc(roundId).get();
-    final round    = RoundModel.fromMap(roundDoc.data()!, roundDoc.id);
-    final updated  = round.submissions.map((s) {
+    final round = RoundModel.fromMap(roundDoc.data()!, roundDoc.id);
+    final updated = round.submissions.map((s) {
       if (s.playerId == targetPlayerId) {
         final nv = Map<String, String>.from(s.votes)..[voterId] = voteType;
         return s.copyWith(votes: nv);
@@ -262,10 +351,22 @@ class GameService {
     });
   }
 
-  Future<void> selectUniqueWord(
+  /// Add targetPlayerId to this voter's picks list (multi-select).
+  Future<void> voteUniqueWord(
       String gameId, String roundId, String targetPlayerId) async {
+    final voterId = currentUserId;
+    // Firestore arrayUnion on a nested list field
     await _rounds(gameId).doc(roundId).update({
-      'uniquePlayerIds': FieldValue.arrayUnion([targetPlayerId]),
+      'uniqueVotes.$voterId': FieldValue.arrayUnion([targetPlayerId]),
+    });
+  }
+
+  /// Remove targetPlayerId from this voter's picks list (deselect one).
+  Future<void> removeUniqueVote(
+      String gameId, String roundId, String targetPlayerId) async {
+    final voterId = currentUserId;
+    await _rounds(gameId).doc(roundId).update({
+      'uniqueVotes.$voterId': FieldValue.arrayRemove([targetPlayerId]),
     });
   }
 
@@ -278,7 +379,7 @@ class GameService {
   // ── Score settling ────────────────────────────────────────────────────────
 
   Future<void> settleVotingScores(String gameId, String roundId) async {
-    final doc   = await _rounds(gameId).doc(roundId).get();
+    final doc = await _rounds(gameId).doc(roundId).get();
     final round = RoundModel.fromMap(doc.data()!, roundId);
     final batch = _db.batch();
     for (final sub in round.submissions) {
@@ -293,38 +394,101 @@ class GameService {
   }
 
   Future<void> settleUniquenessScores(String gameId, String roundId) async {
-    final doc   = await _rounds(gameId).doc(roundId).get();
+    final doc = await _rounds(gameId).doc(roundId).get();
     final round = RoundModel.fromMap(doc.data()!, roundId);
     final batch = _db.batch();
-    final allUnique = {
-      ...round.uniqueSubmissions.map((s) => s.playerId),
-      ...round.uniquePlayerIds,
-    };
-    for (final pid in allUnique) {
-      batch.update(_players(gameId).doc(pid), {'score': FieldValue.increment(5)});
+
+    // Count votes per targetPlayerId
+    final voteCounts = <String, int>{};
+    for (final picks in round.uniqueVotes.values) {
+      for (final targetId in picks) {
+        voteCounts[targetId] = (voteCounts[targetId] ?? 0) + 1;
+      }
     }
+
+    if (voteCounts.isNotEmpty) {
+      // Find the highest vote count
+      final maxVotes = voteCounts.values.reduce((a, b) => a > b ? a : b);
+
+      // Only players whose word got the MOST votes get +5
+      // (ties: all tied players get +5)
+      for (final entry in voteCounts.entries) {
+        if (entry.value == maxVotes) {
+          batch.update(_players(gameId).doc(entry.key),
+              {'score': FieldValue.increment(5)});
+        }
+      }
+    }
+
     await batch.commit();
   }
 
   // ── Streams ───────────────────────────────────────────────────────────────
 
   Stream<GameModel> watchGame(String gameId) => _games
-      .doc(gameId).snapshots()
+      .doc(gameId)
+      .snapshots()
       .map((s) => GameModel.fromMap(s.data()!, s.id));
 
   Stream<List<PlayerModel>> watchPlayers(String gameId) =>
-      _players(gameId).orderBy('score', descending: true).snapshots()
-      .map((s) => s.docs.map((d) => PlayerModel.fromMap(d.data(), d.id)).toList());
+      _players(gameId).orderBy('score', descending: true).snapshots().map((s) =>
+          s.docs.map((d) => PlayerModel.fromMap(d.data(), d.id)).toList());
 
-  Stream<RoundModel?> watchCurrentRound(String gameId) =>
-      _games.doc(gameId).snapshots().asyncExpand((snap) {
-        final data = snap.data();
-        if (data == null) return Stream.value(null);
-        final cur = data['currentRound'] as int? ?? 0;
-        if (cur == 0) return Stream.value(null);
-        return _rounds(gameId).doc('round_$cur').snapshots()
-            .map((s) => s.exists ? RoundModel.fromMap(s.data()!, s.id) : null);
-      });
+  Stream<RoundModel?> watchCurrentRound(String gameId) {
+    // switchMap: cancels previous inner stream when outer emits new value
+    // asyncExpand does NOT cancel — causes stale round_1 to block round_2
+    StreamSubscription? inner;
+    late StreamController<RoundModel?> controller;
+
+    controller = StreamController<RoundModel?>.broadcast(
+      onCancel: () => inner?.cancel(),
+    );
+
+    _games.doc(gameId).snapshots().listen(
+          (gameSnap) {
+            final data = gameSnap.data();
+            if (data == null) {
+              controller.add(null);
+              return;
+            }
+            final cur = data['currentRound'] as int? ?? 0;
+            if (cur == 0) {
+              controller.add(null);
+              return;
+            }
+
+            // Cancel previous round listener before subscribing to new one
+            inner?.cancel();
+            print('DEBUG watchCurrentRound switching to round_$cur');
+            inner = _rounds(gameId).doc('round_$cur').snapshots().listen(
+              (roundSnap) {
+                if (!controller.isClosed) {
+                  controller.add(
+                    roundSnap.exists
+                        ? RoundModel.fromMap(roundSnap.data()!, roundSnap.id)
+                        : null,
+                  );
+                }
+              },
+              onError: controller.addError,
+            );
+          },
+          onError: controller.addError,
+          onDone: () {
+            inner?.cancel();
+            controller.close();
+          },
+        );
+
+    return controller.stream;
+  }
+
+  /// Returns count of non-eliminated players. Used to skip uniqueness phase.
+  Future<int> getActivePlayers(String gameId) async {
+    final snap =
+        await _players(gameId).where('isEliminated', isEqualTo: false).get();
+    return snap.docs.length;
+  }
 
   Future<bool> isHost(String gameId) async {
     final doc = await _games.doc(gameId).get();

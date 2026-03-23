@@ -7,8 +7,7 @@ import './game_service.dart';
 
 // ── Service ───────────────────────────────────────────────────────────────────
 
-final gameServiceProvider =
-    Provider<GameService>((ref) => GameService());
+final gameServiceProvider = Provider<GameService>((ref) => GameService());
 
 // ── Session ───────────────────────────────────────────────────────────────────
 
@@ -16,14 +15,8 @@ class SessionState {
   final String? gameId;
   final String? userId;
   final String? username;
-
   const SessionState({this.gameId, this.userId, this.username});
-
-  SessionState copyWith({
-    String? gameId,
-    String? userId,
-    String? username,
-  }) =>
+  SessionState copyWith({String? gameId, String? userId, String? username}) =>
       SessionState(
         gameId: gameId ?? this.gameId,
         userId: userId ?? this.userId,
@@ -33,45 +26,44 @@ class SessionState {
 
 class SessionNotifier extends StateNotifier<SessionState> {
   SessionNotifier() : super(const SessionState());
-
-  void setSession({
-    required String gameId,
-    required String userId,
-    required String username,
-  }) =>
-      state = state.copyWith(
-          gameId: gameId, userId: userId, username: username);
-
+  void setSession(
+          {required String gameId,
+          required String userId,
+          required String username}) =>
+      state =
+          state.copyWith(gameId: gameId, userId: userId, username: username);
   void clear() => state = const SessionState();
 }
 
-final sessionProvider =
-    StateNotifierProvider<SessionNotifier, SessionState>(
-        (ref) => SessionNotifier());
+final sessionProvider = StateNotifierProvider<SessionNotifier, SessionState>(
+    (ref) => SessionNotifier());
 
 // ── Firestore streams ─────────────────────────────────────────────────────────
 
 final gameStreamProvider = StreamProvider.family<GameModel, String>(
-    (ref, gameId) =>
-        ref.watch(gameServiceProvider).watchGame(gameId));
+    (ref, gameId) => ref.watch(gameServiceProvider).watchGame(gameId));
 
-final playersStreamProvider =
-    StreamProvider.family<List<PlayerModel>, String>((ref, gameId) =>
-        ref.watch(gameServiceProvider).watchPlayers(gameId));
+final playersStreamProvider = StreamProvider.family<List<PlayerModel>, String>(
+    (ref, gameId) => ref.watch(gameServiceProvider).watchPlayers(gameId));
 
-final currentRoundProvider =
-    StreamProvider.family<RoundModel?, String>((ref, gameId) =>
-        ref.watch(gameServiceProvider).watchCurrentRound(gameId));
+final currentRoundProvider = StreamProvider.family<RoundModel?, String>(
+    (ref, gameId) => ref.watch(gameServiceProvider).watchCurrentRound(gameId));
 
 // ── Timer ─────────────────────────────────────────────────────────────────────
+// NOT autoDispose — keeps ticking across rebuilds within the same game session.
 
 class TimerNotifier extends StateNotifier<int> {
   TimerNotifier() : super(30);
   Timer? _timer;
+  String? _activePhaseKey; // tracks which phase the timer is for
 
-  void startFrom(int seconds) {
+  void startPhase(String phaseKey, int seconds) {
+    // Don't restart if already running for this exact phase
+    if (_activePhaseKey == phaseKey) return;
+    _activePhaseKey = phaseKey;
     _timer?.cancel();
     state = seconds.clamp(0, 30);
+    if (state <= 0) return;
     _timer = Timer.periodic(const Duration(seconds: 1), (_) {
       if (!mounted) {
         _timer?.cancel();
@@ -92,9 +84,9 @@ class TimerNotifier extends StateNotifier<int> {
   }
 }
 
-final timerProvider =
-    StateNotifierProvider.autoDispose<TimerNotifier, int>(
-        (ref) => TimerNotifier());
+// Use family keyed by gameId — one timer per game, persists across rebuilds
+final timerProvider = StateNotifierProvider.family<TimerNotifier, int, String>(
+    (ref, gameId) => TimerNotifier());
 
 // ── Phase Orchestrator ────────────────────────────────────────────────────────
 
@@ -115,61 +107,61 @@ class PhaseOrchestrator extends StateNotifier<void> {
 
   void _onRound(RoundModel? round) async {
     if (round == null) return;
-    if (round.state == RoundState.waiting ||
-        round.state == RoundState.results) return;
+    if (round.state == RoundState.waiting) return;
 
-    // Sync timer for all clients from server timestamp
-    _syncTimer(round);
+    // Cancel any pending timer when results phase hit or new round detected
+    if (round.state == RoundState.results) {
+      _phaseTimer?.cancel();
+      _lastPhaseKey = null;
+      return;
+    }
 
     final phaseKey = '${round.id}:${round.state.name}';
 
+    // Sync the UI timer for all clients
+    _syncTimer(round, phaseKey);
+
     if (_lastPhaseKey == phaseKey) {
-      // Same phase — check if all-ready (uniqueness early advance)
+      // Same phase update — check early advance for uniqueness
       await _checkEarlyAdvance(round);
       return;
     }
 
+    // New phase detected
     _lastPhaseKey = phaseKey;
     _phaseTimer?.cancel();
 
-    final amHost =
-        await _ref.read(gameServiceProvider).isHost(_gameId);
-    if (!amHost) return; // only host advances state
+    final amHost = await _ref.read(gameServiceProvider).isHost(_gameId);
+    if (!amHost) return;
 
-    final elapsed = round.phaseStartedAt != null
-        ? DateTime.now().difference(round.phaseStartedAt!)
-        : Duration.zero;
-    final remaining = const Duration(seconds: 30) - elapsed;
-    final secs = remaining.inSeconds.clamp(0, 30);
+    // Calculate remaining seconds from server timestamp
+    final secs = _remainingSecs(round);
 
     if (secs <= 0) {
       await _advance(round);
     } else {
-      _phaseTimer =
-          Timer(Duration(seconds: secs), () => _advance(round));
+      _phaseTimer = Timer(Duration(seconds: secs), () => _advance(round));
     }
   }
 
-  void _syncTimer(RoundModel round) {
-    final elapsed = round.phaseStartedAt != null
-        ? DateTime.now().difference(round.phaseStartedAt!)
-        : Duration.zero;
-    final remaining = const Duration(seconds: 30) - elapsed;
-    _ref
-        .read(timerProvider.notifier)
-        .startFrom(remaining.inSeconds.clamp(0, 30));
+  int _remainingSecs(RoundModel round) {
+    if (round.phaseStartedAt == null) return 30;
+    final elapsed = DateTime.now().difference(round.phaseStartedAt!);
+    return (30 - elapsed.inSeconds).clamp(0, 30);
+  }
+
+  void _syncTimer(RoundModel round, String phaseKey) {
+    final secs = _remainingSecs(round);
+    _ref.read(timerProvider(_gameId).notifier).startPhase(phaseKey, secs);
   }
 
   Future<void> _checkEarlyAdvance(RoundModel round) async {
     if (round.state != RoundState.uniqueness) return;
-    final amHost =
-        await _ref.read(gameServiceProvider).isHost(_gameId);
+    final amHost = await _ref.read(gameServiceProvider).isHost(_gameId);
     if (!amHost) return;
-
-    final players = _ref
-            .read(playersStreamProvider(_gameId))
-            .whenOrNull(data: (p) => p) ??
-        [];
+    final players =
+        _ref.read(playersStreamProvider(_gameId)).whenOrNull(data: (p) => p) ??
+            [];
     final active = players.where((p) => !p.isEliminated).length;
     if (active > 0 && round.readyPlayerIds.length >= active) {
       _phaseTimer?.cancel();
@@ -183,7 +175,17 @@ class PhaseOrchestrator extends StateNotifier<void> {
 
     if (round.state == RoundState.voting) {
       await service.settleVotingScores(_gameId, round.id);
+
+      // Check if anyone survived — if all eliminated, skip uniqueness
+      // Re-read after settling (scores just updated) — use fresh Firestore check
+      final playersSnap = await service.getActivePlayers(_gameId);
+      if (playersSnap == 0) {
+        // All eliminated — jump straight to results
+        await service.advanceRoundState(_gameId, round.id, RoundState.results);
+        return;
+      }
     }
+
     if (round.state == RoundState.uniqueness) {
       await service.settleUniquenessScores(_gameId, round.id);
     }
@@ -221,55 +223,66 @@ final phaseOrchestratorProvider = StateNotifierProvider.autoDispose
 
 // ── Derived providers ─────────────────────────────────────────────────────────
 
-final selfPlayerProvider =
-    Provider.family<PlayerModel?, String>((ref, gameId) {
+final selfPlayerProvider = Provider.family<PlayerModel?, String>((ref, gameId) {
   final session = ref.watch(sessionProvider);
   return ref.watch(playersStreamProvider(gameId)).whenOrNull(
-        data: (players) => players.cast<PlayerModel?>().firstWhere(
-              (p) => p?.id == session.userId,
-              orElse: () => null,
-            ),
+        data: (players) => players
+            .cast<PlayerModel?>()
+            .firstWhere((p) => p?.id == session.userId, orElse: () => null),
       );
 });
 
-final isEliminatedProvider =
-    Provider.family<bool, String>((ref, gameId) =>
-        ref.watch(selfPlayerProvider(gameId))?.isEliminated ?? false);
+final isEliminatedProvider = Provider.family<bool, String>((ref, gameId) =>
+    ref.watch(selfPlayerProvider(gameId))?.isEliminated ?? false);
 
 final leaderboardProvider =
     Provider.family<List<PlayerModel>, String>((ref, gameId) {
   return ref.watch(playersStreamProvider(gameId)).whenOrNull(
-        data: (players) =>
-            [...players]..sort((a, b) => b.score.compareTo(a.score)),
-      ) ??
+            data: (players) =>
+                [...players]..sort((a, b) => b.score.compareTo(a.score)),
+          ) ??
       [];
 });
 
-/// The current user's vote for a given target: null | 'up' | 'down'
-final myVoteProvider = Provider.family<String?,
-    ({String gameId, String targetPlayerId})>((ref, args) {
+final myVoteProvider =
+    Provider.family<String?, ({String gameId, String targetPlayerId})>(
+        (ref, args) {
   final session = ref.watch(sessionProvider);
   return ref.watch(currentRoundProvider(args.gameId)).whenOrNull(
     data: (round) {
       if (round == null) return null;
       final sub = round.submissions.cast<PlayerSubmission?>().firstWhere(
-            (s) => s?.playerId == args.targetPlayerId,
-            orElse: () => null,
-          );
+          (s) => s?.playerId == args.targetPlayerId,
+          orElse: () => null);
       return sub?.votes[session.userId ?? ''];
     },
   );
 });
 
-/// Whether the current user has pressed "التالي" this round
-final hasMarkedReadyProvider =
-    Provider.family<bool, String>((ref, gameId) {
+final hasMarkedReadyProvider = Provider.family<bool, String>((ref, gameId) {
   final session = ref.watch(sessionProvider);
   return ref.watch(currentRoundProvider(gameId)).whenOrNull(
-        data: (round) =>
-            round?.readyPlayerIds
-                .contains(session.userId ?? '') ??
-            false,
-      ) ??
+            data: (round) =>
+                round?.readyPlayerIds.contains(session.userId ?? '') ?? false,
+          ) ??
+      false;
+});
+
+final myUniquePicksProvider =
+    Provider.family<List<String>, String>((ref, gameId) {
+  final session = ref.watch(sessionProvider);
+  return ref.watch(currentRoundProvider(gameId)).whenOrNull(
+            data: (round) => round?.myPicks(session.userId ?? '') ?? [],
+          ) ??
+      [];
+});
+
+/// Whether the current user is the host of [gameId].
+/// Derived from the game stream — no async needed.
+final isHostProvider = Provider.family<bool, String>((ref, gameId) {
+  final session = ref.watch(sessionProvider);
+  return ref.watch(gameStreamProvider(gameId)).whenOrNull(
+            data: (game) => game.hostId == session.userId,
+          ) ??
       false;
 });

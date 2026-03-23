@@ -63,9 +63,7 @@ class VintageCard extends StatelessWidget {
         border: Border.all(color: HuruufColors.cardBorder, width: 2.5),
         boxShadow: const [
           BoxShadow(
-              color: Color(0x44000000),
-              blurRadius: 12,
-              offset: Offset(4, 6)),
+              color: Color(0x44000000), blurRadius: 12, offset: Offset(4, 6)),
         ],
       ),
       child: Stack(
@@ -98,20 +96,20 @@ class VintageCard extends StatelessWidget {
   List<Widget> _corners() {
     const s = 24.0;
     return [
-      Positioned(top: 4, left: 4, child: _Ornament(s)),
+      const Positioned(top: 4, left: 4, child: _Ornament(s)),
       Positioned(
           top: 4,
           right: 4,
-          child: Transform.flip(flipX: true, child: _Ornament(s))),
+          child: Transform.flip(flipX: true, child: const _Ornament(s))),
       Positioned(
           bottom: 4,
           left: 4,
-          child: Transform.flip(flipY: true, child: _Ornament(s))),
+          child: Transform.flip(flipY: true, child: const _Ornament(s))),
       Positioned(
           bottom: 4,
           right: 4,
-          child:
-              Transform.flip(flipX: true, flipY: true, child: _Ornament(s))),
+          child: Transform.flip(
+              flipX: true, flipY: true, child: const _Ornament(s))),
     ];
   }
 }
@@ -122,13 +120,34 @@ class _TitleBand extends StatelessWidget {
   final String letter;
 
   static const _names = <String, String>{
-    'أ': 'الألف', 'ب': 'الباء', 'ت': 'التاء', 'ث': 'الثاء',
-    'ج': 'الجيم', 'ح': 'الحاء', 'خ': 'الخاء', 'د': 'الدال',
-    'ذ': 'الذال', 'ر': 'الراء', 'ز': 'الزاي', 'س': 'السين',
-    'ش': 'الشين', 'ص': 'الصاد', 'ض': 'الضاد', 'ط': 'الطاء',
-    'ظ': 'الظاء', 'ع': 'العين', 'غ': 'الغين', 'ف': 'الفاء',
-    'ق': 'القاف', 'ك': 'الكاف', 'ل': 'اللام', 'م': 'الميم',
-    'ن': 'النون', 'ه': 'الهاء', 'و': 'الواو', 'ي': 'الياء',
+    'أ': 'الألف',
+    'ب': 'الباء',
+    'ت': 'التاء',
+    'ث': 'الثاء',
+    'ج': 'الجيم',
+    'ح': 'الحاء',
+    'خ': 'الخاء',
+    'د': 'الدال',
+    'ذ': 'الذال',
+    'ر': 'الراء',
+    'ز': 'الزاي',
+    'س': 'السين',
+    'ش': 'الشين',
+    'ص': 'الصاد',
+    'ض': 'الضاد',
+    'ط': 'الطاء',
+    'ظ': 'الظاء',
+    'ع': 'العين',
+    'غ': 'الغين',
+    'ف': 'الفاء',
+    'ق': 'القاف',
+    'ك': 'الكاف',
+    'ل': 'اللام',
+    'م': 'الميم',
+    'ن': 'النون',
+    'ه': 'الهاء',
+    'و': 'الواو',
+    'ي': 'الياء',
   };
 
   @override
@@ -145,9 +164,7 @@ class _TitleBand extends StatelessWidget {
         textAlign: TextAlign.center,
         textDirection: TextDirection.rtl,
         style: arabicStyle(
-            fontSize: 14,
-            color: HuruufColors.cream,
-            weight: FontWeight.w900),
+            fontSize: 14, color: HuruufColors.cream, weight: FontWeight.w900),
       ),
     );
   }
@@ -161,8 +178,7 @@ class _Illustration extends StatelessWidget {
   Widget build(BuildContext context) => SizedBox(
         height: 80,
         child: Center(
-          child:
-              Text(category.emoji, style: const TextStyle(fontSize: 56)),
+          child: Text(category.emoji, style: const TextStyle(fontSize: 56)),
         ),
       );
 }
@@ -174,22 +190,18 @@ class _StaticAnswer extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Container(
         width: double.infinity,
-        padding:
-            const EdgeInsets.symmetric(vertical: 7, horizontal: 10),
+        padding: const EdgeInsets.symmetric(vertical: 7, horizontal: 10),
         decoration: BoxDecoration(
           color: Colors.white.withOpacity(0.5),
           borderRadius: BorderRadius.circular(6),
-          border: Border.all(
-              color: HuruufColors.cardBorder.withOpacity(0.4)),
+          border: Border.all(color: HuruufColors.cardBorder.withOpacity(0.4)),
         ),
         child: Text(
           answer ?? '—',
           textAlign: TextAlign.center,
           textDirection: TextDirection.rtl,
           style: arabicStyle(
-              fontSize: 18,
-              color: HuruufColors.text,
-              weight: FontWeight.w900),
+              fontSize: 18, color: HuruufColors.text, weight: FontWeight.w900),
         ),
       );
 }
@@ -206,33 +218,29 @@ class _AnswerInput extends StatelessWidget {
         textAlign: TextAlign.center,
         onChanged: onChanged,
         style: arabicStyle(
-            fontSize: 18,
-            color: HuruufColors.text,
-            weight: FontWeight.w900),
+            fontSize: 18, color: HuruufColors.text, weight: FontWeight.w900),
         decoration: InputDecoration(
           filled: true,
           fillColor: Colors.white.withOpacity(0.6),
           hintText: 'اكتب إجابتك',
           hintTextDirection: TextDirection.rtl,
           hintStyle: arabicStyle(
-              fontSize: 14,
-              color: HuruufColors.text.withOpacity(0.4)),
+              fontSize: 14, color: HuruufColors.text.withOpacity(0.4)),
           contentPadding:
               const EdgeInsets.symmetric(vertical: 7, horizontal: 10),
           border: OutlineInputBorder(
             borderRadius: BorderRadius.circular(6),
-            borderSide: BorderSide(
-                color: HuruufColors.cardBorder.withOpacity(0.4)),
+            borderSide:
+                BorderSide(color: HuruufColors.cardBorder.withOpacity(0.4)),
           ),
           enabledBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(6),
-            borderSide: BorderSide(
-                color: HuruufColors.cardBorder.withOpacity(0.4)),
+            borderSide:
+                BorderSide(color: HuruufColors.cardBorder.withOpacity(0.4)),
           ),
           focusedBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(6),
-            borderSide:
-                const BorderSide(color: HuruufColors.gold, width: 2),
+            borderSide: const BorderSide(color: HuruufColors.gold, width: 2),
           ),
         ),
       );
@@ -260,8 +268,7 @@ class _OrnamentPainter extends CustomPainter {
     canvas.drawCircle(Offset(cx, cy), size.width * 0.4, p);
     canvas.drawCircle(Offset(cx, cy), size.width * 0.2, p);
     canvas.drawLine(Offset(0, cy), Offset(size.width * 0.25, cy), p);
-    canvas.drawLine(
-        Offset(size.width * 0.75, cy), Offset(size.width, cy), p);
+    canvas.drawLine(Offset(size.width * 0.75, cy), Offset(size.width, cy), p);
   }
 
   @override
@@ -277,8 +284,8 @@ class _NoisePainter extends CustomPainter {
       ..strokeWidth = 0.5;
     for (int i = 0; i < 300; i++) {
       canvas.drawCircle(
-          Offset(rand.nextDouble() * size.width,
-              rand.nextDouble() * size.height),
+          Offset(
+              rand.nextDouble() * size.width, rand.nextDouble() * size.height),
           0.5,
           p);
     }
@@ -300,21 +307,17 @@ class FaceDownCard extends StatelessWidget {
         decoration: BoxDecoration(
           color: HuruufColors.cardBg.withOpacity(0.6),
           borderRadius: BorderRadius.circular(10),
-          border:
-              Border.all(color: HuruufColors.cardBorder, width: 2),
+          border: Border.all(color: HuruufColors.cardBorder, width: 2),
           boxShadow: const [
             BoxShadow(
-                color: Color(0x33000000),
-                blurRadius: 6,
-                offset: Offset(2, 4))
+                color: Color(0x33000000), blurRadius: 6, offset: Offset(2, 4))
           ],
         ),
         child: Stack(children: [
           Positioned.fill(child: CustomPaint(painter: _NoisePainter())),
           Center(
               child: CustomPaint(
-                  size: const Size(70, 100),
-                  painter: _CardBackPainter())),
+                  size: const Size(70, 100), painter: _CardBackPainter())),
         ]),
       );
 }
@@ -330,8 +333,7 @@ class _CardBackPainter extends CustomPainter {
       final o = i * 7.0;
       canvas.drawRRect(
           RRect.fromRectAndRadius(
-              Rect.fromLTWH(o, o, size.width - o * 2,
-                  size.height - o * 2),
+              Rect.fromLTWH(o, o, size.width - o * 2, size.height - o * 2),
               const Radius.circular(6)),
           p);
     }
@@ -360,9 +362,9 @@ class _SandWatchTimerState extends State<SandWatchTimer>
   @override
   void initState() {
     super.initState();
-    _ctrl = AnimationController(
-        vsync: this, duration: const Duration(seconds: 1))
-      ..repeat();
+    _ctrl =
+        AnimationController(vsync: this, duration: const Duration(seconds: 1))
+          ..repeat();
   }
 
   @override
@@ -385,9 +387,7 @@ class _SandWatchTimerState extends State<SandWatchTimer>
           builder: (_, __) => CustomPaint(
             size: const Size(56, 84),
             painter: _HourglassPainter(
-                progress: progress,
-                urgent: urgent,
-                anim: _ctrl.value),
+                progress: progress, urgent: urgent, anim: _ctrl.value),
           ),
         ),
         const SizedBox(height: 4),
@@ -396,9 +396,7 @@ class _SandWatchTimerState extends State<SandWatchTimer>
           style: GoogleFonts.orbitron(
             fontSize: urgent ? 22 : 18,
             fontWeight: FontWeight.bold,
-            color: urgent
-                ? HuruufColors.downvote
-                : HuruufColors.cardBorder,
+            color: urgent ? HuruufColors.downvote : HuruufColors.cardBorder,
           ),
         ),
         Text('ثانية',
@@ -413,9 +411,7 @@ class _SandWatchTimerState extends State<SandWatchTimer>
 
 class _HourglassPainter extends CustomPainter {
   _HourglassPainter(
-      {required this.progress,
-      required this.urgent,
-      required this.anim});
+      {required this.progress, required this.urgent, required this.anim});
   final double progress;
   final bool urgent;
   final double anim;
@@ -427,14 +423,15 @@ class _HourglassPainter extends CustomPainter {
       ..color = HuruufColors.cardBorder
       ..strokeWidth = 2.5
       ..style = PaintingStyle.stroke;
-    final sand =
-        Paint()..color = color.withOpacity(0.85)..style = PaintingStyle.fill;
+    final sand = Paint()
+      ..color = color.withOpacity(0.85)
+      ..style = PaintingStyle.fill;
 
     final w = size.width;
     final h = size.height;
     final cx = w / 2;
 
-    canvas.drawLine(Offset(4, 6), Offset(w - 4, 6), frame);
+    canvas.drawLine(const Offset(4, 6), Offset(w - 4, 6), frame);
     canvas.drawLine(Offset(4, h - 6), Offset(w - 4, h - 6), frame);
 
     canvas.drawPath(
@@ -478,8 +475,7 @@ class _HourglassPainter extends CustomPainter {
 
     if (progress > 0.05) {
       canvas.drawCircle(
-        Offset(cx + math.sin(anim * math.pi * 6) * 1.5,
-            h / 2 - 2 + anim * 12),
+        Offset(cx + math.sin(anim * math.pi * 6) * 1.5, h / 2 - 2 + anim * 12),
         1.5,
         Paint()..color = color.withOpacity(0.9),
       );
@@ -552,13 +548,11 @@ class ScoreChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Container(
-        padding:
-            const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
         decoration: BoxDecoration(
           color: HuruufColors.gold.withOpacity(0.2),
           borderRadius: BorderRadius.circular(20),
-          border:
-              Border.all(color: HuruufColors.gold, width: 1.5),
+          border: Border.all(color: HuruufColors.gold, width: 1.5),
         ),
         child: Text(
           '$score نقطة',

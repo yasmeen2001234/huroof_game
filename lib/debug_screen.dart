@@ -26,7 +26,10 @@ class _DebugScreenState extends State<DebugScreen> {
   }
 
   Future<void> _fetch() async {
-    setState(() { _loading = true; _error = ''; });
+    setState(() {
+      _loading = true;
+      _error = '';
+    });
     try {
       final gamesSnap = await _db.collection('games').get();
       final Map<String, List<String>> rooms = {};
@@ -46,35 +49,43 @@ class _DebugScreenState extends State<DebugScreen> {
         rooms[gameId] = names;
       }
 
-      setState(() { _rooms = rooms; _loading = false; });
+      setState(() {
+        _rooms = rooms;
+        _loading = false;
+      });
     } catch (e) {
-      setState(() { _error = '$e'; _loading = false; });
+      setState(() {
+        _error = '$e';
+        _loading = false;
+      });
     }
   }
 
   Future<void> _deleteRoom(String gameId) async {
     try {
       // Delete players
-      final players = await _db
-          .collection('games').doc(gameId).collection('players').get();
+      final players =
+          await _db.collection('games').doc(gameId).collection('players').get();
       // Delete rounds
-      final rounds = await _db
-          .collection('games').doc(gameId).collection('rounds').get();
+      final rounds =
+          await _db.collection('games').doc(gameId).collection('rounds').get();
 
       final batch = _db.batch();
-      for (final d in players.docs) batch.delete(d.reference);
-      for (final d in rounds.docs) batch.delete(d.reference);
+      for (final d in players.docs) {
+        batch.delete(d.reference);
+      }
+      for (final d in rounds.docs) {
+        batch.delete(d.reference);
+      }
       batch.delete(_db.collection('games').doc(gameId));
       await batch.commit();
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Deleted $gameId'),
-            backgroundColor: Colors.green));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('Deleted $gameId'), backgroundColor: Colors.green));
       _fetch();
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error: $e'),
-            backgroundColor: Colors.red));
+          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red));
     }
   }
 
@@ -112,10 +123,10 @@ class _DebugScreenState extends State<DebugScreen> {
           : _error.isNotEmpty
               ? Center(
                   child: Padding(
-                    padding: const EdgeInsets.all(20),
-                    child: Text('❌ Error:\n$_error',
-                        style: const TextStyle(color: Colors.redAccent)),
-                  ))
+                  padding: const EdgeInsets.all(20),
+                  child: Text('❌ Error:\n$_error',
+                      style: const TextStyle(color: Colors.redAccent)),
+                ))
               : _rooms.isEmpty
                   ? const Center(
                       child: Text('✅ No rooms in database',
@@ -165,16 +176,14 @@ class _DebugScreenState extends State<DebugScreen> {
                                 if (players.isEmpty)
                                   const Text('  (no players)',
                                       style: TextStyle(
-                                          color: Colors.white54,
-                                          fontSize: 13))
+                                          color: Colors.white54, fontSize: 13))
                                 else
                                   ...players.map((name) => Padding(
                                         padding: const EdgeInsets.only(
                                             left: 8, top: 2),
                                         child: Row(children: [
                                           const Text('👤  ',
-                                              style:
-                                                  TextStyle(fontSize: 14)),
+                                              style: TextStyle(fontSize: 14)),
                                           Text(name,
                                               style: const TextStyle(
                                                   color: Colors.white,

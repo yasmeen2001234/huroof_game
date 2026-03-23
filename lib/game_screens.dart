@@ -36,20 +36,28 @@ class LobbyScreen extends ConsumerWidget {
                   alignment: Alignment.centerLeft,
                   child: TextButton.icon(
                     onPressed: onLeave,
-                    icon: const Icon(Icons.exit_to_app, color: Colors.white60, size: 18),
-                    label: Text('مغادرة', style: arabicStyle(fontSize: 13, color: Colors.white60)),
+                    icon: const Icon(Icons.exit_to_app,
+                        color: Colors.white60, size: 18),
+                    label: Text('مغادرة',
+                        style:
+                            arabicStyle(fontSize: 13, color: Colors.white60)),
                   ),
                 ),
               Text('حروف',
                   style: arabicStyle(
-                          fontSize: 48, color: Colors.white, weight: FontWeight.w900)
+                          fontSize: 48,
+                          color: Colors.white,
+                          weight: FontWeight.w900)
                       .copyWith(shadows: const [
-                    Shadow(color: Color(0x44000000), offset: Offset(2, 4), blurRadius: 8)
+                    Shadow(
+                        color: Color(0x44000000),
+                        offset: Offset(2, 4),
+                        blurRadius: 8)
                   ])),
               const SizedBox(height: 8),
               Container(
-                padding: const EdgeInsets.symmetric(
-                    horizontal: 18, vertical: 7),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 18, vertical: 7),
                 decoration: BoxDecoration(
                   color: Colors.white.withOpacity(0.2),
                   borderRadius: BorderRadius.circular(30),
@@ -66,8 +74,7 @@ class LobbyScreen extends ConsumerWidget {
               const SizedBox(height: 4),
               Text('شارك الكود مع أصدقائك',
                   style: arabicStyle(
-                      fontSize: 13,
-                      color: Colors.white.withOpacity(0.8))),
+                      fontSize: 13, color: Colors.white.withOpacity(0.8))),
             ]),
           ),
 
@@ -90,11 +97,9 @@ class LobbyScreen extends ConsumerWidget {
                             color: Colors.white,
                             weight: FontWeight.w800)),
                   ]),
-                ).animate().fadeIn(
-                    delay: Duration(milliseconds: 100 * i)),
+                ).animate().fadeIn(delay: Duration(milliseconds: 100 * i)),
               ),
-              loading: () =>
-                  const Center(child: CircularProgressIndicator()),
+              loading: () => const Center(child: CircularProgressIndicator()),
               error: (e, _) => Center(child: Text('$e')),
             ),
           ),
@@ -102,8 +107,7 @@ class LobbyScreen extends ConsumerWidget {
           // Players list
           Expanded(
             child: Container(
-              margin: const EdgeInsets.symmetric(
-                  horizontal: 20, vertical: 10),
+              margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
               decoration: BoxDecoration(
                 color: Colors.white.withOpacity(0.15),
                 borderRadius: BorderRadius.circular(20),
@@ -118,8 +122,7 @@ class LobbyScreen extends ConsumerWidget {
                     final p = players[i];
                     return ListTile(
                       leading: CircleAvatar(
-                        backgroundColor:
-                            Colors.white.withOpacity(0.3),
+                        backgroundColor: Colors.white.withOpacity(0.3),
                         child: Text(p.username[0].toUpperCase(),
                             style: const TextStyle(
                                 color: Colors.white,
@@ -136,10 +139,8 @@ class LobbyScreen extends ConsumerWidget {
                               padding: const EdgeInsets.symmetric(
                                   horizontal: 8, vertical: 3),
                               decoration: BoxDecoration(
-                                  color: HuruufColors.gold
-                                      .withOpacity(0.8),
-                                  borderRadius:
-                                      BorderRadius.circular(10)),
+                                  color: HuruufColors.gold.withOpacity(0.8),
+                                  borderRadius: BorderRadius.circular(10)),
                               child: Text('قائد',
                                   style: arabicStyle(
                                       fontSize: 12,
@@ -147,47 +148,38 @@ class LobbyScreen extends ConsumerWidget {
                                       weight: FontWeight.w800)),
                             )
                           : null,
-                    ).animate().fadeIn(
-                        delay: Duration(milliseconds: 80 * i));
+                    ).animate().fadeIn(delay: Duration(milliseconds: 80 * i));
                   },
                 ),
-                loading: () =>
-                    const Center(child: CircularProgressIndicator()),
+                loading: () => const Center(child: CircularProgressIndicator()),
                 error: (e, _) => Center(child: Text('$e')),
               ),
             ),
           ),
 
           // Start button (host only)
-          if (session.userId != null)
-            FutureBuilder<bool>(
-              future: ref.read(gameServiceProvider).isHost(gameId),
-              builder: (_, snap) {
-                if (snap.data != true)
-                  return const SizedBox.shrink();
-                return Padding(
-                  padding: const EdgeInsets.fromLTRB(40, 0, 40, 20),
-                  child: SizedBox(
-                    width: double.infinity,
-                    height: 54,
-                    child: ElevatedButton(
-                      onPressed: () => service.startNextRound(gameId),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: HuruufColors.cardBorder,
-                        foregroundColor: HuruufColors.cream,
-                        shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(16)),
-                        elevation: 6,
-                      ),
-                      child: Text('ابدأ اللعبة! 🎮',
-                          style: arabicStyle(
-                              fontSize: 22,
-                              color: HuruufColors.cream,
-                              weight: FontWeight.w900)),
-                    ),
+          if (ref.watch(isHostProvider(gameId)))
+            Padding(
+              padding: const EdgeInsets.fromLTRB(40, 0, 40, 20),
+              child: SizedBox(
+                width: double.infinity,
+                height: 54,
+                child: ElevatedButton(
+                  onPressed: () => service.startNextRound(gameId),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: HuruufColors.cardBorder,
+                    foregroundColor: HuruufColors.cream,
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16)),
+                    elevation: 6,
                   ),
-                );
-              },
+                  child: Text('ابدأ اللعبة! 🎮',
+                      style: arabicStyle(
+                          fontSize: 22,
+                          color: HuruufColors.cream,
+                          weight: FontWeight.w900)),
+                ),
+              ),
             ),
         ]),
       ),
@@ -200,8 +192,7 @@ class LobbyScreen extends ConsumerWidget {
 // =============================================================================
 
 class TypingScreen extends ConsumerStatefulWidget {
-  const TypingScreen(
-      {super.key, required this.gameId, required this.round});
+  const TypingScreen({super.key, required this.gameId, required this.round});
   final String gameId;
   final RoundModel round;
 
@@ -213,6 +204,16 @@ class _TypingScreenState extends ConsumerState<TypingScreen> {
   final _ctrl = TextEditingController();
   bool _submitted = false;
   bool _advancing = false;
+
+  @override
+  void didUpdateWidget(TypingScreen old) {
+    super.didUpdateWidget(old);
+    if (old.round.id != widget.round.id) {
+      _ctrl.clear();
+      _submitted = false;
+      _advancing = false;
+    }
+  }
 
   @override
   void dispose() {
@@ -230,34 +231,36 @@ class _TypingScreenState extends ConsumerState<TypingScreen> {
         .submitAnswer(widget.gameId, widget.round.id, answer);
   }
 
-  // Advance immediately when every active player has submitted
-  void _checkAllSubmitted(
-      RoundModel round, List<PlayerModel> players) async {
+  void _checkAllSubmitted(RoundModel round, List<PlayerModel> players) async {
+    if (round.id != widget.round.id) return;
+    if (round.state != RoundState.typing) return;
     if (_advancing) return;
     final active = players.where((p) => !p.isEliminated).length;
     if (active > 0 && round.submissions.length >= active) {
       _advancing = true;
-      final isHost = await ref
-          .read(gameServiceProvider)
-          .isHost(widget.gameId);
+      final isHost = await ref.read(gameServiceProvider).isHost(widget.gameId);
       if (isHost && mounted) {
-        await ref.read(gameServiceProvider).advanceRoundState(
-            widget.gameId, round.id, RoundState.voting);
+        await ref
+            .read(gameServiceProvider)
+            .advanceRoundState(widget.gameId, round.id, RoundState.voting);
       }
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final timer = ref.watch(timerProvider);
+    final timer = ref.watch(timerProvider(widget.gameId));
     final isEliminated = ref.watch(isEliminatedProvider(widget.gameId));
-    final roundAsync = ref.watch(currentRoundProvider(widget.gameId));
-    final playersAsync =
-        ref.watch(playersStreamProvider(widget.gameId));
 
-    roundAsync.whenData((r) {
-      playersAsync.whenData((players) {
-        if (r != null) _checkAllSubmitted(r, players);
+    // Safe to call ref.listen in build — Riverpod deduplicates per build cycle
+    ref.listen(currentRoundProvider(widget.gameId), (_, next) {
+      next.whenData((round) {
+        if (round == null || !mounted) return;
+        final players = ref
+                .read(playersStreamProvider(widget.gameId))
+                .whenOrNull(data: (p) => p) ??
+            [];
+        _checkAllSubmitted(round, players);
       });
     });
 
@@ -266,8 +269,7 @@ class _TypingScreenState extends ConsumerState<TypingScreen> {
       body: SafeArea(
         child: Column(children: [
           PhaseHeader(
-              state: RoundState.typing,
-              roundNumber: widget.round.roundNumber),
+              state: RoundState.typing, roundNumber: widget.round.roundNumber),
           if (isEliminated) ...[
             const Spacer(),
             _SpectatorBanner(),
@@ -319,15 +321,14 @@ class _TypingScreenState extends ConsumerState<TypingScreen> {
 // =============================================================================
 
 class VotingScreen extends ConsumerWidget {
-  const VotingScreen(
-      {super.key, required this.gameId, required this.round});
+  const VotingScreen({super.key, required this.gameId, required this.round});
   final String gameId;
   final RoundModel round;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final session = ref.watch(sessionProvider);
-    final timer = ref.watch(timerProvider);
+    final timer = ref.watch(timerProvider(gameId));
     final isEliminated = ref.watch(isEliminatedProvider(gameId));
     final service = ref.watch(gameServiceProvider);
 
@@ -335,10 +336,7 @@ class VotingScreen extends ConsumerWidget {
       backgroundColor: HuruufColors.teal,
       body: SafeArea(
         child: Column(children: [
-          PhaseHeader(
-              state: RoundState.voting,
-              roundNumber: round.roundNumber),
-
+          PhaseHeader(state: RoundState.voting, roundNumber: round.roundNumber),
           if (isEliminated)
             Expanded(child: _SpectatorBanner())
           else ...[
@@ -351,11 +349,10 @@ class VotingScreen extends ConsumerWidget {
             Expanded(
               child: ListView.separated(
                 scrollDirection: Axis.horizontal,
-                padding: const EdgeInsets.symmetric(
-                    horizontal: 20, vertical: 8),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
                 itemCount: round.submissions.length,
-                separatorBuilder: (_, __) =>
-                    const SizedBox(width: 16),
+                separatorBuilder: (_, __) => const SizedBox(width: 16),
                 itemBuilder: (_, i) {
                   final sub = round.submissions[i];
                   final isSelf = sub.playerId == session.userId;
@@ -382,8 +379,7 @@ class VotingScreen extends ConsumerWidget {
                               gameId, round.id, sub.playerId, 'down'),
                     )
                         .animate()
-                        .fadeIn(
-                            delay: Duration(milliseconds: 120 * i))
+                        .fadeIn(delay: Duration(milliseconds: 120 * i))
                         .slideX(begin: 0.2),
                   );
                 },
@@ -420,12 +416,9 @@ class _VotingCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: Colors.white
-            .withOpacity(isSelf ? 0.35 : 0.18),
+        color: Colors.white.withOpacity(isSelf ? 0.35 : 0.18),
         borderRadius: BorderRadius.circular(16),
-        border: isSelf
-            ? Border.all(color: HuruufColors.gold, width: 2)
-            : null,
+        border: isSelf ? Border.all(color: HuruufColors.gold, width: 2) : null,
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -448,9 +441,7 @@ class _VotingCard extends StatelessWidget {
                 textDirection: TextDirection.rtl,
                 overflow: TextOverflow.ellipsis,
                 style: arabicStyle(
-                    fontSize: 13,
-                    color: Colors.white,
-                    weight: FontWeight.w800),
+                    fontSize: 13, color: Colors.white, weight: FontWeight.w800),
               ),
             ),
           ]),
@@ -489,8 +480,7 @@ class _VotingCard extends StatelessWidget {
             Padding(
               padding: const EdgeInsets.only(top: 6),
               child: Text('لا يمكنك التصويت على إجابتك',
-                  style:
-                      arabicStyle(fontSize: 11, color: Colors.white54),
+                  style: arabicStyle(fontSize: 11, color: Colors.white54),
                   textDirection: TextDirection.rtl),
             ),
         ],
@@ -540,16 +530,13 @@ class _VoteBtn extends StatelessWidget {
                     ]
                   : [],
             ),
-            child: Icon(icon,
-                color: active ? Colors.white : c, size: 22),
+            child: Icon(icon, color: active ? Colors.white : c, size: 22),
           ),
         ),
         const SizedBox(height: 4),
         Text(count.toString(),
-            style: TextStyle(
-                color: c,
-                fontWeight: FontWeight.bold,
-                fontSize: 13)),
+            style:
+                TextStyle(color: c, fontWeight: FontWeight.bold, fontSize: 13)),
       ],
     );
   }
@@ -566,8 +553,7 @@ class UniquenessScreen extends ConsumerStatefulWidget {
   final RoundModel round;
 
   @override
-  ConsumerState<UniquenessScreen> createState() =>
-      _UniquenessScreenState();
+  ConsumerState<UniquenessScreen> createState() => _UniquenessScreenState();
 }
 
 class _UniquenessScreenState extends ConsumerState<UniquenessScreen> {
@@ -580,16 +566,14 @@ class _UniquenessScreenState extends ConsumerState<UniquenessScreen> {
   @override
   Widget build(BuildContext context) {
     final session = ref.watch(sessionProvider);
-    final timer = ref.watch(timerProvider);
-    final isEliminated =
-        ref.watch(isEliminatedProvider(widget.gameId));
-    final hasReady =
-        ref.watch(hasMarkedReadyProvider(widget.gameId));
+    final timer = ref.watch(timerProvider(widget.gameId));
+    final isEliminated = ref.watch(isEliminatedProvider(widget.gameId));
+    final hasReady = ref.watch(hasMarkedReadyProvider(widget.gameId));
+    final myPicks = ref.watch(myUniquePicksProvider(widget.gameId));
     final service = ref.watch(gameServiceProvider);
 
-    final validSubs = widget.round.submissions
-        .where((s) => !s.isEliminated)
-        .toList();
+    final validSubs =
+        widget.round.submissions.where((s) => !s.isEliminated).toList();
 
     return Scaffold(
       backgroundColor: HuruufColors.teal,
@@ -598,7 +582,6 @@ class _UniquenessScreenState extends ConsumerState<UniquenessScreen> {
           PhaseHeader(
               state: RoundState.uniqueness,
               roundNumber: widget.round.roundNumber),
-
           if (isEliminated)
             Expanded(child: _SpectatorBanner())
           else ...[
@@ -606,10 +589,8 @@ class _UniquenessScreenState extends ConsumerState<UniquenessScreen> {
               padding: const EdgeInsets.symmetric(vertical: 10),
               child: SandWatchTimer(secondsRemaining: timer),
             ),
-
             Padding(
-              padding: const EdgeInsets.symmetric(
-                  horizontal: 20, vertical: 4),
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
               child: Text('اختر الكلمات الغير مكررة',
                   textDirection: TextDirection.rtl,
                   style: arabicStyle(
@@ -617,21 +598,23 @@ class _UniquenessScreenState extends ConsumerState<UniquenessScreen> {
                       color: Colors.white,
                       weight: FontWeight.w900)),
             ),
-
-            // Horizontal scroll — same layout as voting
             Expanded(
               child: ListView.separated(
                 scrollDirection: Axis.horizontal,
-                padding: const EdgeInsets.symmetric(
-                    horizontal: 20, vertical: 8),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
                 itemCount: validSubs.length,
-                separatorBuilder: (_, __) =>
-                    const SizedBox(width: 16),
+                separatorBuilder: (_, __) => const SizedBox(width: 16),
                 itemBuilder: (_, i) {
                   final sub = validSubs[i];
                   final isSelf = sub.playerId == session.userId;
-                  final picked = widget.round.uniquePlayerIds
-                      .contains(sub.playerId);
+
+                  // Did I pick this card?
+                  final iMyPicked = myPicks.contains(sub.playerId);
+
+                  // Total number of players who voted this card
+                  final totalVotes =
+                      widget.round.uniqueVoteCountFor(sub.playerId);
 
                   return SizedBox(
                     width: 230,
@@ -640,24 +623,21 @@ class _UniquenessScreenState extends ConsumerState<UniquenessScreen> {
                       category: widget.round.category,
                       letter: widget.round.letter,
                       isSelf: isSelf,
-                      picked: picked,
-                      onTap: isSelf || picked
-                          ? null
-                          : () => service.selectUniqueWord(
-                              widget.gameId,
-                              widget.round.id,
-                              sub.playerId),
+                      iMyPicked: iMyPicked,
+                      totalVotes: totalVotes,
+                      onTap: iMyPicked
+                          ? () => service.removeUniqueVote(
+                              widget.gameId, widget.round.id, sub.playerId)
+                          : () => service.voteUniqueWord(
+                              widget.gameId, widget.round.id, sub.playerId),
                     )
                         .animate()
-                        .fadeIn(
-                            delay: Duration(milliseconds: 100 * i))
+                        .fadeIn(delay: Duration(milliseconds: 100 * i))
                         .slideX(begin: 0.2),
                   );
                 },
               ),
             ),
-
-            // "التالي" — visible to ALL players
             Padding(
               padding: const EdgeInsets.fromLTRB(40, 8, 40, 16),
               child: SizedBox(
@@ -700,7 +680,8 @@ class _UniqueCard extends StatelessWidget {
     required this.category,
     required this.letter,
     required this.isSelf,
-    required this.picked,
+    required this.iMyPicked, // did I vote this card?
+    required this.totalVotes, // how many players total voted this card
     this.onTap,
   });
 
@@ -708,7 +689,8 @@ class _UniqueCard extends StatelessWidget {
   final TaskCategory category;
   final String letter;
   final bool isSelf;
-  final bool picked;
+  final bool iMyPicked;
+  final int totalVotes;
   final VoidCallback? onTap;
 
   @override
@@ -719,7 +701,7 @@ class _UniqueCard extends StatelessWidget {
         duration: const Duration(milliseconds: 200),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(16),
-          boxShadow: picked
+          boxShadow: iMyPicked
               ? [
                   BoxShadow(
                       color: HuruufColors.gold.withOpacity(0.5),
@@ -735,30 +717,92 @@ class _UniqueCard extends StatelessWidget {
             answer: submission.answer,
             readOnly: true,
           ),
-          if (picked)
+
+          // MY vote highlight — only shown to me (the voter)
+          if (iMyPicked)
             Positioned.fill(
               child: Container(
                 decoration: BoxDecoration(
                   color: HuruufColors.gold.withOpacity(0.25),
                   borderRadius: BorderRadius.circular(12),
-                  border:
-                      Border.all(color: HuruufColors.gold, width: 3),
+                  border: Border.all(color: HuruufColors.gold, width: 3),
                 ),
-                child: const Center(
-                    child: Icon(Icons.star_rounded,
-                        color: HuruufColors.gold, size: 48)),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(Icons.star_rounded,
+                        color: HuruufColors.gold, size: 44),
+                    const SizedBox(height: 4),
+                    Text('اضغط للإلغاء',
+                        textDirection: TextDirection.rtl,
+                        style: arabicStyle(
+                            fontSize: 11,
+                            color: HuruufColors.gold,
+                            weight: FontWeight.w800)),
+                  ],
+                ),
               ),
             ),
+
+          // Total vote count badge (top-right) — visible to everyone
+          if (totalVotes > 0)
+            Positioned(
+              top: 8,
+              right: 8,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                decoration: BoxDecoration(
+                  color: HuruufColors.gold,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.star_rounded,
+                        color: Colors.white, size: 12),
+                    const SizedBox(width: 2),
+                    Text('$totalVotes',
+                        style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold)),
+                  ],
+                ),
+              ),
+            ),
+
+          // Username + self badge
           Positioned(
             bottom: 6,
             left: 0,
             right: 0,
-            child: Text(submission.username,
-                textAlign: TextAlign.center,
-                style: arabicStyle(
-                    fontSize: 11,
-                    color: HuruufColors.cardBorder,
-                    weight: FontWeight.w800)),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(submission.username,
+                    textAlign: TextAlign.center,
+                    style: arabicStyle(
+                        fontSize: 11,
+                        color: HuruufColors.cardBorder,
+                        weight: FontWeight.w800)),
+                if (isSelf) ...[
+                  const SizedBox(width: 4),
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                    decoration: BoxDecoration(
+                      color: HuruufColors.gold.withOpacity(0.8),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Text('أنت',
+                        style: arabicStyle(
+                            fontSize: 9,
+                            color: Colors.white,
+                            weight: FontWeight.w900)),
+                  ),
+                ],
+              ],
+            ),
           ),
         ]),
       ),
@@ -771,8 +815,7 @@ class _UniqueCard extends StatelessWidget {
 // =============================================================================
 
 class ResultsScreen extends ConsumerWidget {
-  const ResultsScreen(
-      {super.key, required this.gameId, required this.round});
+  const ResultsScreen({super.key, required this.gameId, required this.round});
   final String gameId;
   final RoundModel round;
 
@@ -786,14 +829,11 @@ class ResultsScreen extends ConsumerWidget {
       body: SafeArea(
         child: Column(children: [
           PhaseHeader(
-              state: RoundState.results,
-              roundNumber: round.roundNumber),
+              state: RoundState.results, roundNumber: round.roundNumber),
           const SizedBox(height: 20),
           Text('🏆 نتائج الجولة',
               style: arabicStyle(
-                  fontSize: 26,
-                  color: Colors.white,
-                  weight: FontWeight.w900)),
+                  fontSize: 26, color: Colors.white, weight: FontWeight.w900)),
           const SizedBox(height: 14),
           Expanded(
             child: ListView.builder(
@@ -806,33 +846,20 @@ class ResultsScreen extends ConsumerWidget {
                       .slideX(begin: -0.2),
             ),
           ),
-          FutureBuilder<bool>(
-            future: service.isHost(gameId),
-            builder: (_, snap) {
-              if (snap.data != true) return const SizedBox.shrink();
-              return Padding(
-                padding: const EdgeInsets.fromLTRB(40, 0, 40, 20),
-                child: SizedBox(
-                  width: double.infinity,
-                  height: 52,
-                  child: ElevatedButton(
-                    onPressed: () => service.startNextRound(gameId),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: HuruufColors.cardBorder,
-                      foregroundColor: HuruufColors.cream,
-                      shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(14)),
-                    ),
-                    child: Text('الجولة التالية ⏭️',
-                        style: arabicStyle(
-                            fontSize: 20,
-                            color: HuruufColors.cream,
-                            weight: FontWeight.w900)),
-                  ),
-                ),
-              );
-            },
-          ),
+          if (ref.watch(isHostProvider(gameId)))
+            Padding(
+              padding: const EdgeInsets.fromLTRB(40, 0, 40, 20),
+              child: SizedBox(
+                width: double.infinity,
+                height: 52,
+                child: ElevatedButton(
+                    onPressed: () {
+                      print('DEBUG next round button tapped, gameId=$gameId');
+                      service.startNextRound(gameId);
+                    },
+                    child: null),
+              ),
+            ),
         ]),
       ),
     );
@@ -849,38 +876,33 @@ class _LeaderRow extends StatelessWidget {
     final medals = {1: '🥇', 2: '🥈', 3: '🥉'};
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
-      padding:
-          const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
         color: rank == 1
             ? HuruufColors.gold.withOpacity(0.25)
             : Colors.white.withOpacity(0.15),
         borderRadius: BorderRadius.circular(14),
-        border: rank == 1
-            ? Border.all(color: HuruufColors.gold, width: 2)
-            : null,
+        border:
+            rank == 1 ? Border.all(color: HuruufColors.gold, width: 2) : null,
       ),
       child: Row(children: [
-        Text(medals[rank] ?? '$rank.',
-            style: const TextStyle(fontSize: 22)),
+        Text(medals[rank] ?? '$rank.', style: const TextStyle(fontSize: 22)),
         const SizedBox(width: 12),
         Expanded(
-          child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(player.username,
-                    textDirection: TextDirection.rtl,
-                    style: arabicStyle(
-                        fontSize: 16,
-                        color: Colors.white,
-                        weight: FontWeight.w900)),
-                if (player.isEliminated)
-                  Text('مُقصى',
-                      style: arabicStyle(
-                          fontSize: 12,
-                          color: HuruufColors.downvote),
-                      textDirection: TextDirection.rtl),
-              ]),
+          child:
+              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(player.username,
+                textDirection: TextDirection.rtl,
+                style: arabicStyle(
+                    fontSize: 16,
+                    color: Colors.white,
+                    weight: FontWeight.w900)),
+            if (player.isEliminated)
+              Text('مُقصى',
+                  style:
+                      arabicStyle(fontSize: 12, color: HuruufColors.downvote),
+                  textDirection: TextDirection.rtl),
+          ]),
         ),
         ScoreChip(score: player.score),
       ]),
@@ -899,17 +921,14 @@ class _WaitingChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding:
-          const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
       decoration: BoxDecoration(
           color: Colors.white.withOpacity(0.2),
           borderRadius: BorderRadius.circular(30)),
       child: Text(label,
           textDirection: TextDirection.rtl,
           style: arabicStyle(
-              fontSize: 15,
-              color: Colors.white,
-              weight: FontWeight.w800)),
+              fontSize: 15, color: Colors.white, weight: FontWeight.w800)),
     )
         .animate(onPlay: (c) => c.repeat())
         .shimmer(duration: 1200.ms, color: Colors.white38);
@@ -924,14 +943,11 @@ class _SpectatorBanner extends StatelessWidget {
           const SizedBox(height: 14),
           Text('أنت في وضع المشاهد',
               style: arabicStyle(
-                  fontSize: 22,
-                  color: Colors.white,
-                  weight: FontWeight.w900),
+                  fontSize: 22, color: Colors.white, weight: FontWeight.w900),
               textDirection: TextDirection.rtl),
           const SizedBox(height: 6),
           Text('تم إقصاؤك هذه الجولة',
-              style:
-                  arabicStyle(fontSize: 15, color: Colors.white70),
+              style: arabicStyle(fontSize: 15, color: Colors.white70),
               textDirection: TextDirection.rtl),
         ]),
       );
