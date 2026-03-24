@@ -58,11 +58,10 @@ class TimerNotifier extends StateNotifier<int> {
   String? _activePhaseKey; // tracks which phase the timer is for
 
   void startPhase(String phaseKey, int seconds) {
-    // Don't restart if already running for this exact phase
     if (_activePhaseKey == phaseKey) return;
     _activePhaseKey = phaseKey;
     _timer?.cancel();
-    state = seconds.clamp(0, 30);
+    state = seconds.clamp(0, 999);
     if (state <= 0) return;
     _timer = Timer.periodic(const Duration(seconds: 1), (_) {
       if (!mounted) {
@@ -145,9 +144,14 @@ class PhaseOrchestrator extends StateNotifier<void> {
   }
 
   int _remainingSecs(RoundModel round) {
-    if (round.phaseStartedAt == null) return 30;
+    // Read phaseDuration from live game stream
+    final duration = _ref
+            .read(gameStreamProvider(_gameId))
+            .whenOrNull(data: (g) => g.phaseDuration) ??
+        30;
+    if (round.phaseStartedAt == null) return duration;
     final elapsed = DateTime.now().difference(round.phaseStartedAt!);
-    return (30 - elapsed.inSeconds).clamp(0, 30);
+    return (duration - elapsed.inSeconds).clamp(0, duration);
   }
 
   void _syncTimer(RoundModel round, String phaseKey) {
@@ -285,4 +289,12 @@ final isHostProvider = Provider.family<bool, String>((ref, gameId) {
             data: (game) => game.hostId == session.userId,
           ) ??
       false;
+});
+
+/// Current phase duration setting (15/30/60/90s)
+final phaseDurationProvider = Provider.family<int, String>((ref, gameId) {
+  return ref.watch(gameStreamProvider(gameId)).whenOrNull(
+            data: (game) => game.phaseDuration,
+          ) ??
+      30;
 });

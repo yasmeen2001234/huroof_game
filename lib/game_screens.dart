@@ -11,173 +11,326 @@ import './game_widgets.dart';
 // LobbyScreen
 // =============================================================================
 
-class LobbyScreen extends ConsumerWidget {
+class LobbyScreen extends ConsumerStatefulWidget {
   const LobbyScreen({super.key, required this.gameId, this.onLeave});
   final String gameId;
   final VoidCallback? onLeave;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final session = ref.watch(sessionProvider);
-    final playersAsync = ref.watch(playersStreamProvider(gameId));
+  ConsumerState<LobbyScreen> createState() => _LobbyScreenState();
+}
+
+class _LobbyScreenState extends ConsumerState<LobbyScreen> {
+  bool _showSettings = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final playersAsync = ref.watch(playersStreamProvider(widget.gameId));
     final service = ref.watch(gameServiceProvider);
+    final isHost = ref.watch(isHostProvider(widget.gameId));
+    final phaseDuration = ref.watch(phaseDurationProvider(widget.gameId));
 
     return Scaffold(
       backgroundColor: HuruufColors.teal,
       body: SafeArea(
-        child: Column(children: [
-          // Header
-          Padding(
-            padding: const EdgeInsets.all(20),
-            child: Column(children: [
-              // Leave button row
-              if (onLeave != null)
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: TextButton.icon(
-                    onPressed: onLeave,
-                    icon: const Icon(Icons.exit_to_app,
-                        color: Colors.white60, size: 18),
-                    label: Text('مغادرة',
-                        style:
-                            arabicStyle(fontSize: 13, color: Colors.white60)),
-                  ),
-                ),
-              Text('حروف',
-                  style: arabicStyle(
-                          fontSize: 48,
-                          color: Colors.white,
-                          weight: FontWeight.w900)
-                      .copyWith(shadows: const [
-                    Shadow(
-                        color: Color(0x44000000),
-                        offset: Offset(2, 4),
-                        blurRadius: 8)
-                  ])),
-              const SizedBox(height: 8),
-              Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 18, vertical: 7),
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.2),
-                  borderRadius: BorderRadius.circular(30),
-                  border: Border.all(
-                      color: Colors.white.withOpacity(0.5), width: 1.5),
-                ),
-                child: Text('كود الغرفة: $gameId',
-                    style: GoogleFonts.orbitron(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
-                        letterSpacing: 3)),
-              ),
-              const SizedBox(height: 4),
-              Text('شارك الكود مع أصدقائك',
-                  style: arabicStyle(
-                      fontSize: 13, color: Colors.white.withOpacity(0.8))),
-            ]),
-          ),
-
-          // Player avatars
-          SizedBox(
-            height: 150,
-            child: playersAsync.when(
-              data: (players) => ListView.builder(
-                scrollDirection: Axis.horizontal,
-                padding: const EdgeInsets.symmetric(horizontal: 20),
-                itemCount: players.length,
-                itemBuilder: (_, i) => Padding(
-                  padding: const EdgeInsets.only(right: 10),
-                  child: Column(children: [
-                    const FaceDownCard(),
-                    const SizedBox(height: 3),
-                    Text(players[i].username,
-                        style: arabicStyle(
-                            fontSize: 12,
+        child: Stack(children: [
+          // ── Main content ──────────────────────────────────────────────
+          Column(children: [
+            // Header
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
+              child: Column(children: [
+                Text('حروف',
+                    style: arabicStyle(
+                            fontSize: 48,
                             color: Colors.white,
-                            weight: FontWeight.w800)),
-                  ]),
-                ).animate().fadeIn(delay: Duration(milliseconds: 100 * i)),
-              ),
-              loading: () => const Center(child: CircularProgressIndicator()),
-              error: (e, _) => Center(child: Text('$e')),
+                            weight: FontWeight.w900)
+                        .copyWith(shadows: const [
+                      Shadow(
+                          color: Color(0x44000000),
+                          offset: Offset(2, 4),
+                          blurRadius: 8)
+                    ])),
+                const SizedBox(height: 8),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 18, vertical: 7),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.2),
+                    borderRadius: BorderRadius.circular(30),
+                    border: Border.all(
+                        color: Colors.white.withOpacity(0.5), width: 1.5),
+                  ),
+                  child: Text('كود الغرفة: ${widget.gameId}',
+                      style: GoogleFonts.orbitron(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
+                          letterSpacing: 3)),
+                ),
+                const SizedBox(height: 4),
+                Text('شارك الكود مع أصدقائك',
+                    style: arabicStyle(
+                        fontSize: 13, color: Colors.white.withOpacity(0.8))),
+              ]),
             ),
-          ),
 
-          // Players list
-          Expanded(
-            child: Container(
-              margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-              decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.15),
-                borderRadius: BorderRadius.circular(20),
-              ),
+            // Player avatars
+            SizedBox(
+              height: 150,
               child: playersAsync.when(
-                data: (players) => ListView.separated(
-                  padding: const EdgeInsets.all(14),
+                data: (players) => ListView.builder(
+                  scrollDirection: Axis.horizontal,
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
                   itemCount: players.length,
-                  separatorBuilder: (_, __) =>
-                      const Divider(color: Colors.white38, height: 1),
-                  itemBuilder: (_, i) {
-                    final p = players[i];
-                    return ListTile(
-                      leading: CircleAvatar(
-                        backgroundColor: Colors.white.withOpacity(0.3),
-                        child: Text(p.username[0].toUpperCase(),
-                            style: const TextStyle(
-                                color: Colors.white,
-                                fontWeight: FontWeight.bold)),
-                      ),
-                      title: Text(p.username,
-                          textDirection: TextDirection.rtl,
+                  itemBuilder: (_, i) => Padding(
+                    padding: const EdgeInsets.only(right: 10),
+                    child: Column(children: [
+                      const FaceDownCard(),
+                      const SizedBox(height: 3),
+                      Text(players[i].username,
                           style: arabicStyle(
-                              fontSize: 15,
+                              fontSize: 12,
                               color: Colors.white,
                               weight: FontWeight.w800)),
-                      trailing: p.isHost
-                          ? Container(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 8, vertical: 3),
-                              decoration: BoxDecoration(
-                                  color: HuruufColors.gold.withOpacity(0.8),
-                                  borderRadius: BorderRadius.circular(10)),
-                              child: Text('قائد',
-                                  style: arabicStyle(
-                                      fontSize: 12,
-                                      color: Colors.white,
-                                      weight: FontWeight.w800)),
-                            )
-                          : null,
-                    ).animate().fadeIn(delay: Duration(milliseconds: 80 * i));
-                  },
+                    ]),
+                  ).animate().fadeIn(delay: Duration(milliseconds: 100 * i)),
                 ),
                 loading: () => const Center(child: CircularProgressIndicator()),
                 error: (e, _) => Center(child: Text('$e')),
               ),
             ),
+
+            // Players list
+            Expanded(
+              child: Container(
+                margin:
+                    const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.15),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: playersAsync.when(
+                  data: (players) => ListView.separated(
+                    padding: const EdgeInsets.all(14),
+                    itemCount: players.length,
+                    separatorBuilder: (_, __) =>
+                        const Divider(color: Colors.white38, height: 1),
+                    itemBuilder: (_, i) {
+                      final p = players[i];
+                      return ListTile(
+                        leading: CircleAvatar(
+                          backgroundColor: Colors.white.withOpacity(0.3),
+                          child: Text(p.username[0].toUpperCase(),
+                              style: const TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold)),
+                        ),
+                        title: Text(p.username,
+                            textDirection: TextDirection.rtl,
+                            style: arabicStyle(
+                                fontSize: 15,
+                                color: Colors.white,
+                                weight: FontWeight.w800)),
+                        trailing: p.isHost
+                            ? Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 8, vertical: 3),
+                                decoration: BoxDecoration(
+                                    color: HuruufColors.gold.withOpacity(0.8),
+                                    borderRadius: BorderRadius.circular(10)),
+                                child: Text('قائد',
+                                    style: arabicStyle(
+                                        fontSize: 12,
+                                        color: Colors.white,
+                                        weight: FontWeight.w800)),
+                              )
+                            : null,
+                      ).animate().fadeIn(delay: Duration(milliseconds: 80 * i));
+                    },
+                  ),
+                  loading: () =>
+                      const Center(child: CircularProgressIndicator()),
+                  error: (e, _) => Center(child: Text('$e')),
+                ),
+              ),
+            ),
+
+            // Start button (host only)
+            if (isHost)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(40, 0, 40, 20),
+                child: SizedBox(
+                  width: double.infinity,
+                  height: 54,
+                  child: ElevatedButton(
+                    onPressed: () => service.startNextRound(widget.gameId),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: HuruufColors.cardBorder,
+                      foregroundColor: HuruufColors.cream,
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16)),
+                      elevation: 6,
+                    ),
+                    child: Text('ابدأ اللعبة! 🎮',
+                        style: arabicStyle(
+                            fontSize: 22,
+                            color: HuruufColors.cream,
+                            weight: FontWeight.w900)),
+                  ),
+                ),
+              ),
+          ]),
+
+          // Tap outside to close — MUST be before the panel in the Stack
+          // so the panel renders on top and receives taps first
+          if (_showSettings)
+            Positioned.fill(
+              child: GestureDetector(
+                onTap: () => setState(() => _showSettings = false),
+                behavior: HitTestBehavior.opaque,
+                child: const SizedBox.expand(),
+              ),
+            ),
+
+          // Settings gear button (top-right) — always on top
+          Positioned(
+            top: 8,
+            right: 12,
+            child: IconButton(
+              icon: AnimatedRotation(
+                turns: _showSettings ? 0.125 : 0,
+                duration: const Duration(milliseconds: 300),
+                child: const Icon(Icons.settings_rounded,
+                    color: Colors.white, size: 28),
+              ),
+              onPressed: () => setState(() => _showSettings = !_showSettings),
+            ),
           ),
 
-          // Start button (host only)
-          if (ref.watch(isHostProvider(gameId)))
-            Padding(
-              padding: const EdgeInsets.fromLTRB(40, 0, 40, 20),
-              child: SizedBox(
-                width: double.infinity,
-                height: 54,
-                child: ElevatedButton(
-                  onPressed: () => service.startNextRound(gameId),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: HuruufColors.cardBorder,
-                    foregroundColor: HuruufColors.cream,
-                    shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(16)),
-                    elevation: 6,
+          // Settings panel — last in Stack = topmost, receives taps before GestureDetector
+          if (_showSettings)
+            Positioned(
+              top: 48,
+              right: 12,
+              child: Material(
+                color: Colors.transparent,
+                child: Container(
+                  width: 240,
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: HuruufColors.cardBorder,
+                    borderRadius: BorderRadius.circular(16),
+                    boxShadow: const [
+                      BoxShadow(
+                          color: Color(0x55000000),
+                          blurRadius: 16,
+                          offset: Offset(0, 6))
+                    ],
                   ),
-                  child: Text('ابدأ اللعبة! 🎮',
-                      style: arabicStyle(
-                          fontSize: 22,
-                          color: HuruufColors.cream,
-                          weight: FontWeight.w900)),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text('الإعدادات',
+                          textDirection: TextDirection.rtl,
+                          style: arabicStyle(
+                              fontSize: 16,
+                              color: HuruufColors.cream,
+                              weight: FontWeight.w900)),
+                      const Divider(color: Colors.white24, height: 20),
+                      Text('وقت التصويت',
+                          textDirection: TextDirection.rtl,
+                          style:
+                              arabicStyle(fontSize: 13, color: Colors.white70)),
+                      const SizedBox(height: 8),
+                      if (isHost) ...[
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 12, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(color: Colors.white24),
+                          ),
+                          child: DropdownButton<int>(
+                            value: phaseDuration,
+                            isExpanded: true,
+                            dropdownColor: HuruufColors.cardBorder,
+                            underline: const SizedBox(),
+                            icon: const Icon(Icons.expand_more,
+                                color: Colors.white70),
+                            items: const [
+                              DropdownMenuItem(
+                                  value: 15,
+                                  child: Text('15 ثانية',
+                                      textDirection: TextDirection.rtl,
+                                      style: TextStyle(color: Colors.white))),
+                              DropdownMenuItem(
+                                  value: 30,
+                                  child: Text('30 ثانية',
+                                      textDirection: TextDirection.rtl,
+                                      style: TextStyle(color: Colors.white))),
+                              DropdownMenuItem(
+                                  value: 60,
+                                  child: Text('60 ثانية',
+                                      textDirection: TextDirection.rtl,
+                                      style: TextStyle(color: Colors.white))),
+                              DropdownMenuItem(
+                                  value: 90,
+                                  child: Text('90 ثانية',
+                                      textDirection: TextDirection.rtl,
+                                      style: TextStyle(color: Colors.white))),
+                            ],
+                            onChanged: (v) {
+                              if (v != null)
+                                service.updatePhaseDuration(widget.gameId, v);
+                            },
+                          ),
+                        ),
+                      ] else ...[
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 12, vertical: 10),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withOpacity(0.08),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Text('$phaseDuration ثانية',
+                              textDirection: TextDirection.rtl,
+                              style: arabicStyle(
+                                  fontSize: 14, color: Colors.white70)),
+                        ),
+                      ],
+                      const Divider(color: Colors.white24, height: 20),
+                      if (widget.onLeave != null)
+                        SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton.icon(
+                            onPressed: () {
+                              setState(() => _showSettings = false);
+                              widget.onLeave!();
+                            },
+                            icon: const Icon(Icons.exit_to_app, size: 18),
+                            label: Text('مغادرة الغرفة',
+                                textDirection: TextDirection.rtl,
+                                style: arabicStyle(
+                                    fontSize: 14,
+                                    color: Colors.white,
+                                    weight: FontWeight.w800)),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: HuruufColors.downvote,
+                              foregroundColor: Colors.white,
+                              shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(10)),
+                              padding: const EdgeInsets.symmetric(vertical: 10),
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -276,7 +429,9 @@ class _TypingScreenState extends ConsumerState<TypingScreen> {
             const Spacer(),
           ] else ...[
             const SizedBox(height: 20),
-            SandWatchTimer(secondsRemaining: timer),
+            SandWatchTimer(
+                secondsRemaining: timer,
+                totalSeconds: ref.watch(phaseDurationProvider(widget.gameId))),
             const SizedBox(height: 20),
             VintageCard(
               category: widget.round.category,
@@ -342,7 +497,9 @@ class VotingScreen extends ConsumerWidget {
           else ...[
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 10),
-              child: SandWatchTimer(secondsRemaining: timer),
+              child: SandWatchTimer(
+                  secondsRemaining: timer,
+                  totalSeconds: ref.watch(phaseDurationProvider(gameId))),
             ),
 
             // Horizontal scroll with fixed-width cards and 16px gap
@@ -587,7 +744,10 @@ class _UniquenessScreenState extends ConsumerState<UniquenessScreen> {
           else ...[
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 10),
-              child: SandWatchTimer(secondsRemaining: timer),
+              child: SandWatchTimer(
+                  secondsRemaining: timer,
+                  totalSeconds:
+                      ref.watch(phaseDurationProvider(widget.gameId))),
             ),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
@@ -853,11 +1013,22 @@ class ResultsScreen extends ConsumerWidget {
                 width: double.infinity,
                 height: 52,
                 child: ElevatedButton(
-                    onPressed: () {
-                      print('DEBUG next round button tapped, gameId=$gameId');
-                      service.startNextRound(gameId);
-                    },
-                    child: null),
+                  onPressed: () {
+                    print('DEBUG next round button tapped, gameId=$gameId');
+                    service.startNextRound(gameId);
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: HuruufColors.cardBorder,
+                    foregroundColor: HuruufColors.cream,
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14)),
+                  ),
+                  child: Text('الجولة التالية ⏭️',
+                      style: arabicStyle(
+                          fontSize: 20,
+                          color: HuruufColors.cream,
+                          weight: FontWeight.w900)),
+                ),
               ),
             ),
         ]),

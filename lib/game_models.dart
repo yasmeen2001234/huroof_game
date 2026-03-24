@@ -238,6 +238,7 @@ class GameModel {
   final int currentRound;
   final DateTime createdAt;
   final bool isActive;
+  final int phaseDuration; // seconds per phase: 15, 30, 60, 90
 
   GameModel({
     required this.id,
@@ -247,6 +248,7 @@ class GameModel {
     this.currentRound = 0,
     required this.createdAt,
     this.isActive = true,
+    this.phaseDuration = 30,
   });
 
   factory GameModel.fromMap(Map<String, dynamic> map, String docId) {
@@ -261,6 +263,7 @@ class GameModel {
       currentRound: map['currentRound'] as int? ?? 0,
       createdAt: (map['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
       isActive: map['isActive'] as bool? ?? true,
+      phaseDuration: map['phaseDuration'] as int? ?? 30,
     );
   }
 
@@ -271,6 +274,7 @@ class GameModel {
         'currentRound': currentRound,
         'createdAt': Timestamp.fromDate(createdAt),
         'isActive': isActive,
+        'phaseDuration': phaseDuration,
       };
 }
 

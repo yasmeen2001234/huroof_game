@@ -5,6 +5,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_database/firebase_database.dart';
 import 'package:flutter/material.dart';
+
 import './game_models.dart';
 
 String _generateRoomCode() {
@@ -481,6 +482,10 @@ class GameService {
         );
 
     return controller.stream;
+  }
+
+  Future<void> updatePhaseDuration(String gameId, int seconds) async {
+    await _games.doc(gameId).update({'phaseDuration': seconds});
   }
 
   /// Returns count of non-eliminated players. Used to skip uniqueness phase.
