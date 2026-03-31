@@ -45,7 +45,7 @@ class HuruufApp extends StatelessWidget {
         textTheme: GoogleFonts.amiriTextTheme(),
         scaffoldBackgroundColor: HuruufColors.teal,
       ),
-      home: HomeScreen(),
+      home: const HomeScreen(),
     );
   }
 }

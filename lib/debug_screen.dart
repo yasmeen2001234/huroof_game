@@ -2,8 +2,6 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
-import './game_widgets.dart';
-
 class DebugScreen extends StatefulWidget {
   const DebugScreen({super.key});
 

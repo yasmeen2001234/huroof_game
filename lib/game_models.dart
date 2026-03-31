@@ -27,7 +27,7 @@ extension TaskCategoryX on TaskCategory {
       case TaskCategory.animal:
         return '🦁';
       case TaskCategory.object:
-        return '🏺';
+        return '🪨';
     }
   }
 }

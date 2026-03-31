@@ -1,10 +1,9 @@
 import 'dart:async';
 import 'dart:math';
-
+import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_database/firebase_database.dart';
-import 'package:flutter/material.dart';
 
 import './game_models.dart';
 
@@ -243,8 +242,12 @@ class GameService {
       final players = await _players(gameId).get();
       final rounds = await _rounds(gameId).get();
       final batch = _db.batch();
-      for (final d in players.docs) batch.delete(d.reference);
-      for (final d in rounds.docs) batch.delete(d.reference);
+      for (final d in players.docs) {
+        batch.delete(d.reference);
+      }
+      for (final d in rounds.docs) {
+        batch.delete(d.reference);
+      }
       batch.delete(_games.doc(gameId));
       await batch.commit();
     } catch (_) {}
@@ -267,9 +270,33 @@ class GameService {
       final newNum = game.currentRound + 1;
       final roundId = 'round_$newNum';
       print('DEBUG creating round $roundId');
-      final category =
-          TaskCategory.values[Random().nextInt(TaskCategory.values.length)];
-      final letter = arabicLetters[Random().nextInt(arabicLetters.length)];
+
+      // Read previous round to avoid repeating same category or letter
+      String? prevCategory;
+      String? prevLetter;
+      if (game.currentRound > 0) {
+        try {
+          final prevDoc =
+              await _rounds(gameId).doc('round_${game.currentRound}').get();
+          if (prevDoc.exists) {
+            prevCategory = prevDoc.data()?['category'] as String?;
+            prevLetter = prevDoc.data()?['letter'] as String?;
+          }
+        } catch (_) {}
+      }
+
+      // Pick category — re-roll until different from last round
+      TaskCategory category;
+      do {
+        category =
+            TaskCategory.values[Random().nextInt(TaskCategory.values.length)];
+      } while (prevCategory != null && category.name == prevCategory);
+
+      // Pick letter — re-roll until different from last round
+      String letter;
+      do {
+        letter = arabicLetters[Random().nextInt(arabicLetters.length)];
+      } while (prevLetter != null && letter == prevLetter);
 
       // Reset isEliminated for ALL players — everyone plays each new round
       final playersSnap = await _players(gameId).get();

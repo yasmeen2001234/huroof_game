@@ -284,8 +284,9 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
                                       style: TextStyle(color: Colors.white))),
                             ],
                             onChanged: (v) {
-                              if (v != null)
+                              if (v != null) {
                                 service.updatePhaseDuration(widget.gameId, v);
+                              }
                             },
                           ),
                         ),
@@ -463,7 +464,7 @@ class _TypingScreenState extends ConsumerState<TypingScreen> {
                 ),
               )
             else
-              _WaitingChip(label: 'تم الإرسال! انتظر الآخرين...'),
+              const _WaitingChip(label: 'تم الإرسال! انتظر الآخرين...'),
           ],
         ]),
       ),

@@ -16,7 +16,7 @@ import 'game_screens.dart';
 // =============================================================================
 
 class HomeScreen extends ConsumerStatefulWidget {
-  HomeScreen({super.key});
+  const HomeScreen({super.key});
 
   @override
   ConsumerState<HomeScreen> createState() => _HomeScreenState();
@@ -286,7 +286,9 @@ class _GameRouterState extends ConsumerState<GameRouter> {
 
   @override
   void dispose() {
-    for (final s in _presenceSubs) s.cancel();
+    for (final s in _presenceSubs) {
+      s.cancel();
+    }
     _gameDeletedSub?.cancel();
     if (!_leftClean) {
       ref.read(gameServiceProvider).leaveGame(widget.gameId);
@@ -301,7 +303,7 @@ class _GameRouterState extends ConsumerState<GameRouter> {
     await ref.read(gameServiceProvider).leaveGame(widget.gameId);
     if (mounted) {
       Navigator.of(context).pushAndRemoveUntil(
-        MaterialPageRoute(builder: (_) => HomeScreen()),
+        MaterialPageRoute(builder: (_) => const HomeScreen()),
         (_) => false,
       );
     }
@@ -314,7 +316,7 @@ class _GameRouterState extends ConsumerState<GameRouter> {
     await ref.read(gameServiceProvider).deleteGame(widget.gameId);
     if (mounted) {
       Navigator.of(context).pushAndRemoveUntil(
-        MaterialPageRoute(builder: (_) => HomeScreen()),
+        MaterialPageRoute(builder: (_) => const HomeScreen()),
         (_) => false,
       );
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
