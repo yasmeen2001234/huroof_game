@@ -44,6 +44,8 @@ class PlayerModel {
   final bool isHost;
   final bool isOnline;
   final DateTime joinedAt;
+  final String? draftAnswer;
+  final String? draftRoundId;
 
   PlayerModel({
     required this.id,
@@ -53,6 +55,8 @@ class PlayerModel {
     this.isHost = false,
     this.isOnline = true,
     required this.joinedAt,
+    this.draftAnswer,
+    this.draftRoundId,
   });
 
   factory PlayerModel.fromMap(Map<String, dynamic> map, String docId) {
@@ -64,6 +68,8 @@ class PlayerModel {
       isHost: map['isHost'] as bool? ?? false,
       isOnline: map['isOnline'] as bool? ?? true,
       joinedAt: (map['joinedAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
+      draftAnswer: map['draftAnswer'] as String?,
+      draftRoundId: map['draftRoundId'] as String?,
     );
   }
 
@@ -74,6 +80,8 @@ class PlayerModel {
         'isHost': isHost,
         'isOnline': isOnline,
         'joinedAt': Timestamp.fromDate(joinedAt),
+        'draftAnswer': draftAnswer,
+        'draftRoundId': draftRoundId,
       };
 }
 
@@ -85,10 +93,10 @@ class PlayerSubmission {
   final String playerId;
   final String username;
   final String answer;
-
-  /// voterId -> 'up' | 'down'   — overwritable so players can change vote
   final Map<String, String> votes;
   final DateTime submittedAt;
+  final int
+      timeRemaining; // seconds left on timer when submitted — used for bonus
 
   PlayerSubmission({
     required this.playerId,
@@ -96,11 +104,16 @@ class PlayerSubmission {
     required this.answer,
     Map<String, String>? votes,
     required this.submittedAt,
+    this.timeRemaining = 0,
   }) : votes = votes ?? {};
 
   int get upvotes => votes.values.where((v) => v == 'up').length;
   int get downvotes => votes.values.where((v) => v == 'down').length;
   bool get isEliminated => votes.isNotEmpty && downvotes > upvotes;
+
+  /// Bonus points earned for submitting quickly: timeRemaining ÷ 5 (floor)
+  /// Only awarded if the word gets upvoted.
+  int get bonusPoints => (timeRemaining / 5).floor();
 
   factory PlayerSubmission.fromMap(Map<String, dynamic> map) {
     return PlayerSubmission(
@@ -110,6 +123,7 @@ class PlayerSubmission {
       votes: Map<String, String>.from(map['votes'] as Map? ?? {}),
       submittedAt:
           (map['submittedAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
+      timeRemaining: map['timeRemaining'] as int? ?? 0,
     );
   }
 
@@ -119,6 +133,7 @@ class PlayerSubmission {
         'answer': answer,
         'votes': votes,
         'submittedAt': Timestamp.fromDate(submittedAt),
+        'timeRemaining': timeRemaining,
       };
 
   PlayerSubmission copyWith({Map<String, String>? votes}) => PlayerSubmission(
@@ -127,6 +142,7 @@ class PlayerSubmission {
         answer: answer,
         votes: votes ?? this.votes,
         submittedAt: submittedAt,
+        timeRemaining: timeRemaining,
       );
 }
 
@@ -150,6 +166,9 @@ class RoundModel {
   /// Players who pressed "التالي" in the uniqueness phase
   final List<String> readyPlayerIds;
 
+  /// Players who pressed "تخطي" in the voting phase
+  final List<String> skipVoters;
+
   RoundModel({
     required this.id,
     required this.roundNumber,
@@ -160,9 +179,11 @@ class RoundModel {
     List<PlayerSubmission>? submissions,
     Map<String, List<String>>? uniqueVotes,
     List<String>? readyPlayerIds,
+    List<String>? skipVoters,
   })  : submissions = submissions ?? [],
         uniqueVotes = uniqueVotes ?? {},
-        readyPlayerIds = readyPlayerIds ?? [];
+        readyPlayerIds = readyPlayerIds ?? [],
+        skipVoters = skipVoters ?? [];
 
   /// How many voters picked a given targetPlayerId
   int uniqueVoteCountFor(String targetPlayerId) => uniqueVotes.values
@@ -209,6 +230,7 @@ class RoundModel {
       uniqueVotes: (map['uniqueVotes'] as Map? ?? {}).map(
           (k, v) => MapEntry(k as String, List<String>.from(v as List? ?? []))),
       readyPlayerIds: List<String>.from(map['readyPlayerIds'] as List? ?? []),
+      skipVoters: List<String>.from(map['skipVoters'] as List? ?? []),
     );
   }
 
@@ -223,6 +245,7 @@ class RoundModel {
         'submissions': submissions.map((s) => s.toMap()).toList(),
         'uniqueVotes': uniqueVotes,
         'readyPlayerIds': readyPlayerIds,
+        'skipVoters': skipVoters,
       };
 }
 

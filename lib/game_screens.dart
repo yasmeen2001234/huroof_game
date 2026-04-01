@@ -1,4 +1,7 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -52,21 +55,43 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
                           blurRadius: 8)
                     ])),
                 const SizedBox(height: 8),
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 18, vertical: 7),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.2),
-                    borderRadius: BorderRadius.circular(30),
-                    border: Border.all(
-                        color: Colors.white.withOpacity(0.5), width: 1.5),
+                GestureDetector(
+                  onTap: () async {
+                    await Clipboard.setData(ClipboardData(text: widget.gameId));
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text('تم نسخ رمز الغرفة',
+                              style: arabicStyle(color: Colors.white)),
+                          backgroundColor: HuruufColors.teal,
+                        ),
+                      );
+                    }
+                  },
+                  child: Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 18, vertical: 7),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.2),
+                      borderRadius: BorderRadius.circular(30),
+                      border: Border.all(
+                          color: Colors.white.withOpacity(0.5), width: 1.5),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text('كود الغرفة: ${widget.gameId}',
+                            style: GoogleFonts.orbitron(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.white,
+                                letterSpacing: 3)),
+                        const SizedBox(width: 8),
+                        Icon(Icons.copy,
+                            size: 16, color: Colors.white.withOpacity(0.8)),
+                      ],
+                    ),
                   ),
-                  child: Text('كود الغرفة: ${widget.gameId}',
-                      style: GoogleFonts.orbitron(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.white,
-                          letterSpacing: 3)),
                 ),
                 const SizedBox(height: 4),
                 Text('شارك الكود مع أصدقائك',
@@ -164,19 +189,38 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
                   width: double.infinity,
                   height: 54,
                   child: ElevatedButton(
-                    onPressed: () => service.startNextRound(widget.gameId),
+                    onPressed: playersAsync.maybeWhen(
+                      data: (players) => players.length > 1
+                          ? () => service.startNextRound(widget.gameId)
+                          : null,
+                      orElse: () => null,
+                    ),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: HuruufColors.cardBorder,
                       foregroundColor: HuruufColors.cream,
                       shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(16)),
                       elevation: 6,
+                      disabledBackgroundColor: Colors.grey.shade400,
                     ),
-                    child: Text('ابدأ اللعبة! 🎮',
-                        style: arabicStyle(
-                            fontSize: 22,
-                            color: HuruufColors.cream,
-                            weight: FontWeight.w900)),
+                    child: playersAsync.maybeWhen(
+                      data: (players) => players.length <= 1
+                          ? Text('انتظر المزيد من اللاعبين',
+                              style: arabicStyle(
+                                  fontSize: 18,
+                                  color: Colors.white70,
+                                  weight: FontWeight.w900))
+                          : Text('ابدأ اللعبة! 🎮',
+                              style: arabicStyle(
+                                  fontSize: 22,
+                                  color: HuruufColors.cream,
+                                  weight: FontWeight.w900)),
+                      orElse: () => Text('ابدأ اللعبة! 🎮',
+                          style: arabicStyle(
+                              fontSize: 22,
+                              color: HuruufColors.cream,
+                              weight: FontWeight.w900)),
+                    ),
                   ),
                 ),
               ),
@@ -284,9 +328,8 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
                                       style: TextStyle(color: Colors.white))),
                             ],
                             onChanged: (v) {
-                              if (v != null) {
+                              if (v != null)
                                 service.updatePhaseDuration(widget.gameId, v);
-                              }
                             },
                           ),
                         ),
@@ -358,6 +401,30 @@ class _TypingScreenState extends ConsumerState<TypingScreen> {
   final _ctrl = TextEditingController();
   bool _submitted = false;
   bool _advancing = false;
+  Timer? _draftSaveTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    // Listen for changes and save draft with debounce
+    _ctrl.addListener(_onTyping);
+  }
+
+  void _onTyping() {
+    // Cancel previous timer
+    _draftSaveTimer?.cancel();
+    // Debounce: save draft 500ms after user stops typing
+    _draftSaveTimer = Timer(const Duration(milliseconds: 500), () {
+      if (mounted && !_submitted) {
+        final draft = _ctrl.text;
+        ref.read(gameServiceProvider).saveDraftAnswer(
+              widget.gameId,
+              widget.round.id,
+              draft,
+            );
+      }
+    });
+  }
 
   @override
   void didUpdateWidget(TypingScreen old) {
@@ -366,11 +433,14 @@ class _TypingScreenState extends ConsumerState<TypingScreen> {
       _ctrl.clear();
       _submitted = false;
       _advancing = false;
+      _draftSaveTimer?.cancel();
     }
   }
 
   @override
   void dispose() {
+    _draftSaveTimer?.cancel();
+    _ctrl.removeListener(_onTyping);
     _ctrl.dispose();
     super.dispose();
   }
@@ -380,9 +450,11 @@ class _TypingScreenState extends ConsumerState<TypingScreen> {
     final answer = _ctrl.text.trim();
     if (answer.isEmpty) return;
     setState(() => _submitted = true);
+    // Capture timer at exact moment of submission for speed bonus
+    final timeLeft = ref.read(timerProvider(widget.gameId));
     await ref
         .read(gameServiceProvider)
-        .submitAnswer(widget.gameId, widget.round.id, answer);
+        .submitAnswer(widget.gameId, widget.round.id, answer, timeLeft);
   }
 
   void _checkAllSubmitted(RoundModel round, List<PlayerModel> players) async {
@@ -394,9 +466,29 @@ class _TypingScreenState extends ConsumerState<TypingScreen> {
       _advancing = true;
       final isHost = await ref.read(gameServiceProvider).isHost(widget.gameId);
       if (isHost && mounted) {
+        // Eliminate anyone who didn't submit before we advance
+        await ref
+            .read(gameServiceProvider)
+            .eliminateNonSubmitters(widget.gameId, round.id);
         await ref
             .read(gameServiceProvider)
             .advanceRoundState(widget.gameId, round.id, RoundState.voting);
+      }
+    }
+  }
+
+  Future<void> _checkAllEliminated() async {
+    if (_advancing) return;
+    final allEliminated = await ref
+        .read(gameServiceProvider)
+        .areAllPlayersEliminated(widget.gameId);
+    if (allEliminated && mounted) {
+      _advancing = true;
+      final isHost = await ref.read(gameServiceProvider).isHost(widget.gameId);
+      if (isHost) {
+        // Skip remaining phases and go to results
+        await ref.read(gameServiceProvider).advanceRoundState(
+            widget.gameId, widget.round.id, RoundState.results);
       }
     }
   }
@@ -415,8 +507,13 @@ class _TypingScreenState extends ConsumerState<TypingScreen> {
                 .whenOrNull(data: (p) => p) ??
             [];
         _checkAllSubmitted(round, players);
+        // Also check if all players are eliminated
+        _checkAllEliminated();
       });
     });
+
+    // Watch players stream to detect when all are eliminated
+    ref.watch(playersStreamProvider(widget.gameId));
 
     return Scaffold(
       backgroundColor: HuruufColors.teal,
@@ -464,7 +561,7 @@ class _TypingScreenState extends ConsumerState<TypingScreen> {
                 ),
               )
             else
-              const _WaitingChip(label: 'تم الإرسال! انتظر الآخرين...'),
+              _WaitingChip(label: 'تم الإرسال! انتظر الآخرين...'),
           ],
         ]),
       ),
@@ -487,6 +584,10 @@ class VotingScreen extends ConsumerWidget {
     final timer = ref.watch(timerProvider(gameId));
     final isEliminated = ref.watch(isEliminatedProvider(gameId));
     final service = ref.watch(gameServiceProvider);
+    final players =
+        ref.watch(playersStreamProvider(gameId)).whenOrNull(data: (p) => p) ??
+            [];
+    final activeCount = players.where((p) => !p.isEliminated).length;
 
     return Scaffold(
       backgroundColor: HuruufColors.teal,
@@ -543,6 +644,51 @@ class VotingScreen extends ConsumerWidget {
                 },
               ),
             ),
+
+            // Skip button
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  SizedBox(
+                    width: double.infinity,
+                    height: 50,
+                    child: ElevatedButton(
+                      onPressed: round.skipVoters.contains(session.userId ?? '')
+                          ? null
+                          : () => service.markSkip(gameId, round.id),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor:
+                            round.skipVoters.contains(session.userId ?? '')
+                                ? Colors.grey.shade400
+                                : HuruufColors.cardBorder,
+                        foregroundColor: HuruufColors.cream,
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14)),
+                      ),
+                      child: Text(
+                        round.skipVoters.contains(session.userId ?? '')
+                            ? 'تم التخطي'
+                            : 'تخطي',
+                        style: arabicStyle(
+                            fontSize: 18,
+                            color: HuruufColors.cream,
+                            weight: FontWeight.w900),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'تخطى ${round.skipVoters.length} من $activeCount',
+                    style: arabicStyle(
+                        fontSize: 14,
+                        color: Colors.white.withOpacity(0.8),
+                        weight: FontWeight.w600),
+                  ),
+                ],
+              ),
+            ),
           ],
         ]),
       ),
@@ -581,7 +727,7 @@ class _VotingCard extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          // Username
+          // Username + speed bonus badge
           Row(mainAxisAlignment: MainAxisAlignment.center, children: [
             CircleAvatar(
               radius: 14,
@@ -602,6 +748,22 @@ class _VotingCard extends StatelessWidget {
                     fontSize: 13, color: Colors.white, weight: FontWeight.w800),
               ),
             ),
+            // Speed bonus badge — only show if they earned any bonus
+            if (submission.bonusPoints > 0) ...[
+              const SizedBox(width: 6),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: HuruufColors.gold,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text('+${submission.bonusPoints} ⚡',
+                    style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold)),
+              ),
+            ],
           ]),
           const SizedBox(height: 10),
 
@@ -1015,7 +1177,6 @@ class ResultsScreen extends ConsumerWidget {
                 height: 52,
                 child: ElevatedButton(
                   onPressed: () {
-                    print('DEBUG next round button tapped, gameId=$gameId');
                     service.startNextRound(gameId);
                   },
                   style: ElevatedButton.styleFrom(

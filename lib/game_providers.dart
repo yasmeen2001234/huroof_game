@@ -160,16 +160,32 @@ class PhaseOrchestrator extends StateNotifier<void> {
   }
 
   Future<void> _checkEarlyAdvance(RoundModel round) async {
-    if (round.state != RoundState.uniqueness) return;
     final amHost = await _ref.read(gameServiceProvider).isHost(_gameId);
     if (!amHost) return;
     final players =
         _ref.read(playersStreamProvider(_gameId)).whenOrNull(data: (p) => p) ??
             [];
     final active = players.where((p) => !p.isEliminated).length;
-    if (active > 0 && round.readyPlayerIds.length >= active) {
+
+    // If all players are eliminated, end the game immediately
+    if (active == 0) {
       _phaseTimer?.cancel();
-      await _advance(round);
+      await _ref
+          .read(gameServiceProvider)
+          .advanceRoundState(_gameId, round.id, RoundState.results);
+      return;
+    }
+
+    if (round.state == RoundState.uniqueness) {
+      if (active > 0 && round.readyPlayerIds.length >= active) {
+        _phaseTimer?.cancel();
+        await _advance(round);
+      }
+    } else if (round.state == RoundState.voting) {
+      if (active > 0 && round.skipVoters.length >= active) {
+        _phaseTimer?.cancel();
+        await _advance(round);
+      }
     }
   }
 
@@ -177,14 +193,34 @@ class PhaseOrchestrator extends StateNotifier<void> {
     if (!mounted) return;
     final service = _ref.read(gameServiceProvider);
 
+    if (round.state == RoundState.typing) {
+      // Auto-submit any saved drafts before eliminating non-submitters
+      await service.autoSubmitDrafts(_gameId, round.id);
+
+      // Eliminate players who never submitted before time ran out
+      await service.eliminateNonSubmitters(_gameId, round.id);
+
+      // Check if all players are eliminated after typing
+      final allEliminated = await service.areAllPlayersEliminated(_gameId);
+      if (allEliminated) {
+        await service.advanceRoundState(_gameId, round.id, RoundState.results);
+        return;
+      }
+    }
+
     if (round.state == RoundState.voting) {
       await service.settleVotingScores(_gameId, round.id);
 
-      // Check if anyone survived — if all eliminated, skip uniqueness
-      // Re-read after settling (scores just updated) — use fresh Firestore check
-      final playersSnap = await service.getActivePlayers(_gameId);
-      if (playersSnap == 0) {
-        // All eliminated — jump straight to results
+      // If all active players agreed to skip voting, go to uniqueness phase
+      final activePlayers = await service.getActivePlayers(_gameId);
+      if (round.skipVoters.length >= activePlayers) {
+        await service.advanceRoundState(
+            _gameId, round.id, RoundState.uniqueness);
+        return;
+      }
+
+      // If no active players remain, go to result
+      if (activePlayers == 0) {
         await service.advanceRoundState(_gameId, round.id, RoundState.results);
         return;
       }
@@ -192,6 +228,13 @@ class PhaseOrchestrator extends StateNotifier<void> {
 
     if (round.state == RoundState.uniqueness) {
       await service.settleUniquenessScores(_gameId, round.id);
+
+      // Check if all players are eliminated after uniqueness
+      final allEliminated = await service.areAllPlayersEliminated(_gameId);
+      if (allEliminated) {
+        await service.advanceRoundState(_gameId, round.id, RoundState.results);
+        return;
+      }
     }
 
     final next = _next(round.state);

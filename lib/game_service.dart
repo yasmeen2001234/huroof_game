@@ -242,12 +242,8 @@ class GameService {
       final players = await _players(gameId).get();
       final rounds = await _rounds(gameId).get();
       final batch = _db.batch();
-      for (final d in players.docs) {
-        batch.delete(d.reference);
-      }
-      for (final d in rounds.docs) {
-        batch.delete(d.reference);
-      }
+      for (final d in players.docs) batch.delete(d.reference);
+      for (final d in rounds.docs) batch.delete(d.reference);
       batch.delete(_games.doc(gameId));
       await batch.commit();
     } catch (_) {}
@@ -259,17 +255,14 @@ class GameService {
   // ── Round management ──────────────────────────────────────────────────────
 
   Future<void> startNextRound(String gameId) async {
-    print('DEBUG startNextRound called for $gameId');
     try {
       final gameDoc = await _games.doc(gameId).get();
       if (!gameDoc.exists) {
-        print('DEBUG game doc does not exist!');
         return;
       }
       final game = GameModel.fromMap(gameDoc.data()!, gameDoc.id);
       final newNum = game.currentRound + 1;
       final roundId = 'round_$newNum';
-      print('DEBUG creating round $roundId');
 
       // Read previous round to avoid repeating same category or letter
       String? prevCategory;
@@ -285,18 +278,17 @@ class GameService {
         } catch (_) {}
       }
 
-      // Pick category — re-roll until different from last round
-      TaskCategory category;
-      do {
-        category =
-            TaskCategory.values[Random().nextInt(TaskCategory.values.length)];
-      } while (prevCategory != null && category.name == prevCategory);
+      // Pick category — exclude previous round's category, then pick randomly from rest
+      final availableCategories =
+          TaskCategory.values.where((c) => c.name != prevCategory).toList();
+      availableCategories.shuffle();
+      final category = availableCategories.first;
 
-      // Pick letter — re-roll until different from last round
-      String letter;
-      do {
-        letter = arabicLetters[Random().nextInt(arabicLetters.length)];
-      } while (prevLetter != null && letter == prevLetter);
+      // Pick letter — exclude previous round's letter, then pick randomly from rest
+      final availableLetters =
+          arabicLetters.where((l) => l != prevLetter).toList();
+      availableLetters.shuffle();
+      final letter = availableLetters.first;
 
       // Reset isEliminated for ALL players — everyone plays each new round
       final playersSnap = await _players(gameId).get();
@@ -314,15 +306,15 @@ class GameService {
         'submissions': [],
         'uniqueVotes': {},
         'readyPlayerIds': [],
+        'skipVoters': [],
       });
       batch.update(_games.doc(gameId), {
         'currentState': RoundState.typing.name,
         'currentRound': newNum,
       });
       await batch.commit();
-      print('DEBUG round $roundId committed successfully');
     } catch (e, st) {
-      print('DEBUG startNextRound ERROR: $e\n$st');
+      print('Error in startNextRound: $e\n$st');
     }
   }
 
@@ -340,7 +332,7 @@ class GameService {
   // ── Player actions ────────────────────────────────────────────────────────
 
   Future<void> submitAnswer(
-      String gameId, String roundId, String answer) async {
+      String gameId, String roundId, String answer, int timeRemaining) async {
     final uid = currentUserId;
     final playerDoc = await _players(gameId).doc(uid).get();
     final player = PlayerModel.fromMap(playerDoc.data()!, playerDoc.id);
@@ -354,6 +346,7 @@ class GameService {
           username: player.username,
           answer: answer.trim(),
           submittedAt: DateTime.now(),
+          timeRemaining: timeRemaining,
         ).toMap(),
       ]),
     });
@@ -404,6 +397,12 @@ class GameService {
     });
   }
 
+  Future<void> markSkip(String gameId, String roundId) async {
+    await _rounds(gameId).doc(roundId).update({
+      'skipVoters': FieldValue.arrayUnion([currentUserId]),
+    });
+  }
+
   // ── Score settling ────────────────────────────────────────────────────────
 
   Future<void> settleVotingScores(String gameId, String roundId) async {
@@ -415,6 +414,11 @@ class GameService {
       if (sub.isEliminated) {
         batch.update(ref, {'isEliminated': true});
       } else if (sub.upvotes > 0) {
+        // +5 base + bonus for submitting quickly (timeRemaining ÷ 5)
+        final total = 5 + sub.bonusPoints;
+        batch.update(ref, {'score': FieldValue.increment(total)});
+      } else if (sub.upvotes == 0 && sub.downvotes == 0) {
+        // No votes received: automatic +5 points
         batch.update(ref, {'score': FieldValue.increment(5)});
       }
     }
@@ -449,6 +453,82 @@ class GameService {
     }
 
     await batch.commit();
+  }
+
+  /// Eliminate players who didn't submit an answer before the timer ran out.
+  Future<void> eliminateNonSubmitters(String gameId, String roundId) async {
+    final roundDoc = await _rounds(gameId).doc(roundId).get();
+    final round = RoundModel.fromMap(roundDoc.data()!, roundDoc.id);
+    final playersDoc = await _players(gameId).get();
+
+    final submittedIds = round.submissions.map((s) => s.playerId).toSet();
+    final batch = _db.batch();
+
+    for (final doc in playersDoc.docs) {
+      final player = PlayerModel.fromMap(doc.data(), doc.id);
+      // If not already eliminated AND didn't submit → eliminate
+      if (!player.isEliminated && !submittedIds.contains(player.id)) {
+        batch.update(doc.reference, {'isEliminated': true});
+      }
+    }
+
+    await batch.commit();
+  }
+
+  /// Save draft answer as user types (without submitting)
+  Future<void> saveDraftAnswer(
+      String gameId, String roundId, String draft) async {
+    final uid = currentUserId;
+    if (uid.isEmpty) return;
+    try {
+      await _players(gameId).doc(uid).update({
+        'draftAnswer': draft,
+        'draftRoundId': roundId,
+      });
+    } catch (_) {}
+  }
+
+  /// Auto-submit drafts when timer expires in typing phase
+  Future<void> autoSubmitDrafts(String gameId, String roundId) async {
+    final playersSnap = await _players(gameId).get();
+    final roundDoc = await _rounds(gameId).doc(roundId).get();
+    if (!roundDoc.exists) return;
+    final round = RoundModel.fromMap(roundDoc.data()!, roundDoc.id);
+    final submittedIds = round.submissions.map((s) => s.playerId).toSet();
+
+    final batch = _db.batch();
+    for (final doc in playersSnap.docs) {
+      final player = PlayerModel.fromMap(doc.data(), doc.id);
+      if (player.draftAnswer != null &&
+          player.draftRoundId == roundId &&
+          player.draftAnswer!.trim().isNotEmpty &&
+          !submittedIds.contains(player.id)) {
+        batch.update(_rounds(gameId).doc(roundId), {
+          'submissions': FieldValue.arrayUnion([
+            PlayerSubmission(
+              playerId: player.id,
+              username: player.username,
+              answer: player.draftAnswer!.trim(),
+              submittedAt: DateTime.now(),
+              timeRemaining: 0,
+            ).toMap(),
+          ]),
+        });
+      }
+    }
+    await batch.commit();
+  }
+
+  /// Check if all players are eliminated (including self)
+  Future<bool> areAllPlayersEliminated(String gameId) async {
+    try {
+      final playersDoc = await _players(gameId).get();
+      final activePlayers =
+          playersDoc.docs.where((d) => !(d['isEliminated'] as bool)).length;
+      return activePlayers == 0;
+    } catch (_) {
+      return false;
+    }
   }
 
   // ── Streams ───────────────────────────────────────────────────────────────
@@ -487,7 +567,7 @@ class GameService {
 
             // Cancel previous round listener before subscribing to new one
             inner?.cancel();
-            print('DEBUG watchCurrentRound switching to round_$cur');
+
             inner = _rounds(gameId).doc('round_$cur').snapshots().listen(
               (roundSnap) {
                 if (!controller.isClosed) {
