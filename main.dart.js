@@ -26682,7 +26682,7 @@ aI2(a,b){var s,r,q,p,o,n,m=A.a6(a.h(0,"hostId"))
 if(m==null)m=""
 s=B.b.lR(B.oX,new A.a9A(a),new A.a9B())
 r=A.ci(a.h(0,"totalRounds"))
-if(r==null)r=5
+if(r==null)r=100
 q=A.ci(a.h(0,"currentRound"))
 if(q==null)q=0
 p=t.Cc.a(a.h(0,"createdAt"))
@@ -89691,7 +89691,7 @@ s=4
 break
 case 5:n=A.oZ(o,o.gdL().kE())
 m=t.a
-n.Dw(o.ap("games").aC(k),A.a5(["hostId",l,"currentState","waiting","totalRounds",25,"currentRound",0,"createdAt",A.anO(1000*Date.now()),"isActive",!0,"phaseDuration",30],t.N,t.z),m)
+n.Dw(o.ap("games").aC(k),A.a5(["hostId",l,"currentState","waiting","totalRounds",100,"currentRound",0,"createdAt",A.anO(1000*Date.now()),"isActive",!0,"phaseDuration",30],t.N,t.z),m)
 n.Dw(o.ap("games").aC(k).ap("players").aC(l),new A.bf(l,a,0,!1,!0,!0,new A.dj(Date.now(),0,!1),null,null).mc(),m)
 s=7
 return A.n(n.b.hf(),$async$oB)
