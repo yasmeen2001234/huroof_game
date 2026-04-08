@@ -9,6 +9,7 @@ import 'package:google_fonts/google_fonts.dart';
 import './game_models.dart';
 import './game_providers.dart';
 import './game_widgets.dart';
+import 'home_screen.dart';
 
 // =============================================================================
 // LobbyScreen
@@ -328,8 +329,9 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
                                       style: TextStyle(color: Colors.white))),
                             ],
                             onChanged: (v) {
-                              if (v != null)
+                              if (v != null) {
                                 service.updatePhaseDuration(widget.gameId, v);
+                              }
                             },
                           ),
                         ),
@@ -561,7 +563,7 @@ class _TypingScreenState extends ConsumerState<TypingScreen> {
                 ),
               )
             else
-              _WaitingChip(label: 'تم الإرسال! انتظر الآخرين...'),
+              const _WaitingChip(label: 'تم الإرسال! انتظر الآخرين...'),
           ],
         ]),
       ),
@@ -1146,6 +1148,11 @@ class ResultsScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final leaderboard = ref.watch(leaderboardProvider(gameId));
     final service = ref.watch(gameServiceProvider);
+    final gameAsync = ref.watch(gameStreamProvider(gameId));
+    final isGameOver = gameAsync.maybeWhen(
+      data: (game) => round.roundNumber >= game.totalRounds,
+      orElse: () => false,
+    );
 
     return Scaffold(
       backgroundColor: HuruufColors.teal,
@@ -1154,7 +1161,7 @@ class ResultsScreen extends ConsumerWidget {
           PhaseHeader(
               state: RoundState.results, roundNumber: round.roundNumber),
           const SizedBox(height: 20),
-          Text('🏆 نتائج الجولة',
+          Text(isGameOver ? '🏆 انتهت اللعبة!' : '🏆 نتائج الجولة',
               style: arabicStyle(
                   fontSize: 26, color: Colors.white, weight: FontWeight.w900)),
           const SizedBox(height: 14),
@@ -1169,7 +1176,7 @@ class ResultsScreen extends ConsumerWidget {
                       .slideX(begin: -0.2),
             ),
           ),
-          if (ref.watch(isHostProvider(gameId)))
+          if (ref.watch(isHostProvider(gameId)) && !isGameOver)
             Padding(
               padding: const EdgeInsets.fromLTRB(40, 0, 40, 20),
               child: SizedBox(
@@ -1186,6 +1193,33 @@ class ResultsScreen extends ConsumerWidget {
                         borderRadius: BorderRadius.circular(14)),
                   ),
                   child: Text('الجولة التالية ⏭️',
+                      style: arabicStyle(
+                          fontSize: 20,
+                          color: HuruufColors.cream,
+                          weight: FontWeight.w900)),
+                ),
+              ),
+            )
+          else if (isGameOver)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(40, 0, 40, 20),
+              child: SizedBox(
+                width: double.infinity,
+                height: 52,
+                child: ElevatedButton(
+                  onPressed: () {
+                    Navigator.of(context).pushAndRemoveUntil(
+                      MaterialPageRoute(builder: (_) => HomeScreen()),
+                      (_) => false,
+                    );
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: HuruufColors.cardBorder,
+                    foregroundColor: HuruufColors.cream,
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14)),
+                  ),
+                  child: Text('العودة للرئيسية 🏠',
                       style: arabicStyle(
                           fontSize: 20,
                           color: HuruufColors.cream,

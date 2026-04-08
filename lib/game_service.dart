@@ -74,7 +74,7 @@ class GameService {
           id: code,
           hostId: uid,
           currentState: RoundState.waiting,
-          totalRounds: 5,
+          totalRounds: 100,
           createdAt: DateTime.now(),
         ).toMap());
     batch.set(
@@ -242,8 +242,12 @@ class GameService {
       final players = await _players(gameId).get();
       final rounds = await _rounds(gameId).get();
       final batch = _db.batch();
-      for (final d in players.docs) batch.delete(d.reference);
-      for (final d in rounds.docs) batch.delete(d.reference);
+      for (final d in players.docs) {
+        batch.delete(d.reference);
+      }
+      for (final d in rounds.docs) {
+        batch.delete(d.reference);
+      }
       batch.delete(_games.doc(gameId));
       await batch.commit();
     } catch (_) {}
@@ -262,6 +266,12 @@ class GameService {
       }
       final game = GameModel.fromMap(gameDoc.data()!, gameDoc.id);
       final newNum = game.currentRound + 1;
+
+      // Check if we've reached the maximum rounds
+      if (newNum > game.totalRounds) {
+        return; // Game over, don't start another round
+      }
+
       final roundId = 'round_$newNum';
 
       // Read previous round to avoid repeating same category or letter
@@ -356,8 +366,9 @@ class GameService {
       String voteType) async {
     assert(voteType == 'up' || voteType == 'down');
     final voterId = currentUserId;
-    if (voterId == targetPlayerId)
+    if (voterId == targetPlayerId) {
       throw Exception('لا يمكنك التصويت على إجابتك');
+    }
     final roundDoc = await _rounds(gameId).doc(roundId).get();
     final round = RoundModel.fromMap(roundDoc.data()!, roundDoc.id);
     final updated = round.submissions.map((s) {

@@ -3,7 +3,6 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:google_fonts/google_fonts.dart';
 
 import './game_models.dart';
 import './game_providers.dart';
@@ -275,6 +274,7 @@ class _GameRouterState extends ConsumerState<GameRouter> {
   StreamSubscription? _gameDeletedSub;
   bool _roomGone = false;
   bool _leftClean = false;
+  bool _hasSeenHost = false;
 
   @override
   void initState() {
@@ -335,6 +335,41 @@ class _GameRouterState extends ConsumerState<GameRouter> {
 
     final gameAsync = ref.watch(gameStreamProvider(widget.gameId));
     final roundAsync = ref.watch(currentRoundProvider(widget.gameId));
+    final playersAsync = ref.watch(playersStreamProvider(widget.gameId));
+    final session = ref.watch(sessionProvider);
+
+    // Listen for host leaving
+    ref.listen(playersStreamProvider(widget.gameId), (_, next) {
+      next.whenData((players) {
+        if (!mounted || _roomGone || _leftClean) return;
+        final hasHost = players.any((p) => p.isHost);
+        if (hasHost) {
+          _hasSeenHost = true;
+        }
+        final amHost = session.userId ==
+            gameAsync.maybeWhen(
+              data: (game) => game.hostId,
+              orElse: () => null,
+            );
+        if (!hasHost && _hasSeenHost && !amHost) {
+          // Host left, and I'm not the host
+          _leftClean = true;
+          if (mounted) {
+            Navigator.of(context).pushAndRemoveUntil(
+              MaterialPageRoute(builder: (_) => const HomeScreen()),
+              (_) => false,
+            );
+            ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+              content: Text('القائد غادر الغرفة',
+                  textDirection: TextDirection.rtl,
+                  style: arabicStyle(color: Colors.white)),
+              backgroundColor: HuruufColors.downvote,
+              duration: const Duration(seconds: 4),
+            ));
+          }
+        }
+      });
+    });
 
     return PopScope(
       canPop: false,
